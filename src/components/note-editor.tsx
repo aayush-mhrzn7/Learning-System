@@ -6,10 +6,12 @@ import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
 import {
   AlertCircle,
+  BookOpen,
   Check,
   CheckCircle2,
   LoaderCircle,
   PanelLeftOpen,
+  Pencil,
   ScanSearch,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -49,6 +51,7 @@ export function NoteEditor({
   const [checkingProgress, setCheckingProgress] = useState("");
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
   const [hovered, setHovered] = useState<{
     claim: ClaimFlag;
     x: number;
@@ -108,8 +111,13 @@ export function NoteEditor({
     },
   });
 
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!readOnly);
+  }, [editor, readOnly]);
+
   const saveNow = useCallback(async () => {
-    if (!editor || loadingContent.current) return;
+    if (!editor || loadingContent.current || !editor.isEditable) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSaveState("saving");
     const response = await fetch(`/api/notes/${noteIdRef.current}`, {
@@ -382,6 +390,17 @@ export function NoteEditor({
               : "Saved"}
         </span>
         <button
+          onClick={() => {
+            if (!readOnly) void saveNow();
+            setReadOnly((current) => !current);
+          }}
+          className="topbar-button"
+          aria-pressed={readOnly}
+        >
+          {readOnly ? <Pencil size={13} /> : <BookOpen size={13} />}
+          {readOnly ? "Edit" : "Read-only"}
+        </button>
+        <button
           onClick={() => void factCheck()}
           disabled={checking}
           className="topbar-button"
@@ -397,7 +416,7 @@ export function NoteEditor({
           {payload.note.status === "published" ? "Re-publish" : "Publish"}
         </button>
       </header>
-      <FormattingToolbar editor={editor} />
+      {readOnly ? null : <FormattingToolbar editor={editor} />}
 
       <div
         className="flex-1 overflow-y-auto"
@@ -408,6 +427,7 @@ export function NoteEditor({
         <article className="w-full px-8 pb-32 pt-10 sm:px-14 lg:px-20">
           <input
             value={title}
+            readOnly={readOnly}
             onChange={(event) => {
               setTitle(event.target.value);
               titleRef.current = event.target.value;
@@ -420,7 +440,9 @@ export function NoteEditor({
                 scheduleSave();
               }
             }}
-            className="mb-3 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444]"
+            className={`mb-3 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444] ${
+              readOnly ? "cursor-default caret-transparent" : ""
+            }`}
             placeholder="Untitled"
             aria-label="Note title"
           />
