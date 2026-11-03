@@ -40,3 +40,23 @@ Fact-check underline hover popover sticks around while editing Markdown / TipTap
 
 - Popover should dismiss on mouse leave, scroll, edit, and note switch.
 - Stale claims should not keep a floating popover open after the underline moves or dims.
+
+## Provider cost and OpenRouter
+
+Direct ChatGPT / OpenAI usage is too expensive right now on a ~$5 plan.
+
+- Treat OpenAI as optional / premium while keeping a cheaper default path.
+- Add OpenRouter support (target about a $10 plan) as a lower-cost provider.
+- Let users choose between ChatGPT (OpenAI) and OpenRouter.
+- Allow picking different models per provider (and ideally per task: fact-check vs gaps).
+- Document cost tradeoffs and recommend cheaper models for extraction / bulk judging.
+
+## Settings dialog + BYOK
+
+Add a settings UI (dialog or page) for AI providers instead of env-only config.
+
+- Settings for active provider, default models, and task-specific model overrides.
+- BYOK: users paste their own OpenAI and/or OpenRouter API keys.
+- Store keys securely (never commit; prefer encrypted/server-only storage, not localStorage plaintext).
+- Validate keys with a lightweight test call and show clear failure states.
+- Keep server routes using the selected provider + key so secrets never hit the client beyond the settings form.
