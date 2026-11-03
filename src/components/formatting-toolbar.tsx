@@ -1,0 +1,208 @@
+"use client";
+
+import type { Editor } from "@tiptap/react";
+import {
+  Bold,
+  Code2,
+  Heading1,
+  Heading2,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Quote,
+  Strikethrough,
+  Unlink,
+} from "lucide-react";
+import { FormEvent, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+export function FormattingToolbar({ editor }: { editor: Editor }) {
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkValue, setLinkValue] = useState("");
+
+  function openLinkDialog() {
+    setLinkValue(editor.getAttributes("link").href ?? "");
+    setLinkOpen(true);
+  }
+
+  function saveLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = linkValue.trim();
+    if (!value) {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      setLinkOpen(false);
+      return;
+    }
+    const href = /^(https?:\/\/|mailto:|tel:)/i.test(value)
+      ? value
+      : `https://${value}`;
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href })
+      .run();
+    setLinkOpen(false);
+  }
+
+  const tools = [
+    {
+      label: "Bold (⌘B)",
+      icon: Bold,
+      active: editor.isActive("bold"),
+      run: () => editor.chain().focus().toggleBold().run(),
+    },
+    {
+      label: "Italic (⌘I)",
+      icon: Italic,
+      active: editor.isActive("italic"),
+      run: () => editor.chain().focus().toggleItalic().run(),
+    },
+    {
+      label: "Strikethrough",
+      icon: Strikethrough,
+      active: editor.isActive("strike"),
+      run: () => editor.chain().focus().toggleStrike().run(),
+    },
+    {
+      label: "Inline code",
+      icon: Code2,
+      active: editor.isActive("code"),
+      run: () => editor.chain().focus().toggleCode().run(),
+    },
+    {
+      label: "Heading 1",
+      icon: Heading1,
+      active: editor.isActive("heading", { level: 1 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+    },
+    {
+      label: "Heading 2",
+      icon: Heading2,
+      active: editor.isActive("heading", { level: 2 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+    },
+    {
+      label: "Bullet list",
+      icon: List,
+      active: editor.isActive("bulletList"),
+      run: () => editor.chain().focus().toggleBulletList().run(),
+    },
+    {
+      label: "Numbered list",
+      icon: ListOrdered,
+      active: editor.isActive("orderedList"),
+      run: () => editor.chain().focus().toggleOrderedList().run(),
+    },
+    {
+      label: "Blockquote",
+      icon: Quote,
+      active: editor.isActive("blockquote"),
+      run: () => editor.chain().focus().toggleBlockquote().run(),
+    },
+  ];
+
+  return (
+    <>
+      <div className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-4">
+        {tools.map((tool) => {
+          const Icon = tool.icon;
+          return (
+            <Button
+              key={tool.label}
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7",
+                tool.active && "bg-[#222] text-foreground",
+              )}
+              onClick={tool.run}
+              title={tool.label}
+              aria-label={tool.label}
+            >
+              <Icon size={14} />
+            </Button>
+          );
+        })}
+        <span className="mx-1 h-4 w-px bg-border" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "h-7 w-7",
+            editor.isActive("link") && "bg-[#222] text-foreground",
+          )}
+          onClick={openLinkDialog}
+          title="Add or edit link"
+          aria-label="Add or edit link"
+        >
+          <LinkIcon size={14} />
+        </Button>
+        {editor.isActive("link") ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() =>
+              editor.chain().focus().extendMarkRange("link").unsetLink().run()
+            }
+            title="Remove link"
+            aria-label="Remove link"
+          >
+            <Unlink size={14} />
+          </Button>
+        ) : null}
+        <span className="ml-auto hidden font-mono text-[10px] text-[#555] md:block">
+          Markdown shortcuts supported
+        </span>
+      </div>
+
+      <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
+        <DialogContent>
+          <form onSubmit={saveLink}>
+            <DialogHeader>
+              <DialogTitle>Add link</DialogTitle>
+              <DialogDescription>
+                Select text first, then enter a URL. Pasted URLs are linked
+                automatically.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="px-5 py-5">
+              <Input
+                autoFocus
+                value={linkValue}
+                onChange={(event) => setLinkValue(event.target.value)}
+                placeholder="https://example.com"
+                inputMode="url"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setLinkOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">Apply link</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

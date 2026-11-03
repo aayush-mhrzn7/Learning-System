@@ -1,26 +1,275 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #ffffff;
+  --muted: #8a8a8a;
+  --border: #242424;
+  --font-sf-pro: "SF Pro Text", "SF Pro Display", "SF Pro", -apple-system,
+    BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-menlo: Menlo, Monaco, "Courier New", monospace;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --font-sans: var(--font-sf-pro);
+  --font-mono: var(--font-menlo);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sf-pro);
+  margin: 0;
+  overflow: hidden;
+}
+
+::selection {
+  background: #ffffff;
+  color: #000000;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+* {
+  scrollbar-color: #333 transparent;
+  scrollbar-width: thin;
+}
+
+.icon-button {
+  display: grid;
+  height: 2rem;
+  width: 2rem;
+  place-items: center;
+  color: #888;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.icon-button:hover {
+  background: #171717;
+  color: #fff;
+}
+
+.sidebar-row {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 2px;
+  text-align: left;
+  font-size: 0.75rem;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.topbar-button {
+  display: inline-flex;
+  height: 2rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  padding: 0 0.7rem;
+  color: #c7c7c7;
+  font-size: 0.625rem;
+  transition:
+    border-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.topbar-button:hover {
+  border-color: #555;
+}
+
+.topbar-button.solid {
+  border-color: #fff;
+  background: #fff;
+  color: #000;
+}
+
+.topbar-button:disabled {
+  opacity: 0.5;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 72%);
+  padding: 1.5rem;
+  backdrop-filter: blur(4px);
+}
+
+.dialog-panel {
+  border: 1px solid #2b2b2b;
+  background: #090909;
+  box-shadow: 0 28px 80px rgb(0 0 0 / 70%);
+}
+
+.learning-editor {
+  min-height: 50vh;
+  outline: none;
+  color: #e7e7e7;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.learning-editor > * + * {
+  margin-top: 1rem;
+}
+
+.learning-editor p.is-editor-empty:first-child::before {
+  content: "Start writing…";
+  float: left;
+  height: 0;
+  color: #464646;
+  pointer-events: none;
+}
+
+.learning-editor h1,
+.learning-editor h2,
+.learning-editor h3 {
+  margin-top: 2.2em;
+  margin-bottom: 0.65em;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.learning-editor h1 {
+  font-size: 1.8rem;
+}
+
+.learning-editor h2 {
+  font-size: 1.45rem;
+}
+
+.learning-editor h3 {
+  font-size: 1.2rem;
+}
+
+.learning-editor ul,
+.learning-editor ol {
+  padding-left: 1.4rem;
+}
+
+.learning-editor ul {
+  list-style: disc;
+}
+
+.learning-editor ol {
+  list-style: decimal;
+}
+
+.learning-editor li {
+  padding-left: 0.25rem;
+}
+
+.learning-editor blockquote {
+  border-left: 2px solid #444;
+  padding-left: 1rem;
+  color: #aaa;
+}
+
+.learning-editor code {
+  border: 1px solid #2d2d2d;
+  background: #111;
+  padding: 0.12em 0.32em;
+  font-family: var(--font-menlo);
+  font-size: 0.86em;
+}
+
+.learning-editor pre {
+  overflow-x: auto;
+  border: 1px solid #252525;
+  background: #090909;
+  padding: 1rem;
+  color: #ddd;
+  font-family: var(--font-menlo);
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.learning-editor pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.learning-editor hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.learning-editor a {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: #555;
+  text-underline-offset: 3px;
+}
+
+.claim-flag {
+  cursor: help;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.claim-incorrect {
+  text-decoration-color: #ef4444;
+}
+
+.claim-unsure {
+  text-decoration-color: #777;
+}
+
+.claim-stale {
+  opacity: 0.55;
+  text-decoration-color: #555;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal {
+  color: #fff;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-name {
+  color: #b9b9b9;
+}
+
+.hljs-comment {
+  color: #666;
+}
+
+.hljs-number,
+.hljs-variable,
+.hljs-attr {
+  color: #8c8c8c;
 }
