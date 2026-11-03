@@ -100,7 +100,8 @@ body {
 button,
 input,
 textarea {
-  font: inherit;
+  /* shorthand `font` would wipe Tailwind size/leading on buttons */
+  font-family: inherit;
 }
 
 button {
