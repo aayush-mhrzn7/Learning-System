@@ -152,7 +152,7 @@ button:disabled {
   align-items: center;
   gap: 0.4rem;
   border: 1px solid var(--border);
-  padding: 0 0.7rem;
+  padding: 0 1rem;
   color: #c7c7c7;
   font-size: 0.625rem;
   transition:

@@ -399,7 +399,12 @@ export function NoteEditor({
       </header>
       <FormattingToolbar editor={editor} />
 
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="flex-1 overflow-y-auto"
+        onScroll={() => {
+          if (hovered) setHovered(null);
+        }}
+      >
         <article className="w-full px-8 pb-32 pt-10 sm:px-14 lg:px-20">
           <input
             value={title}
