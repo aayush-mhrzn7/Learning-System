@@ -44,25 +44,25 @@ export function SearchDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
-        className="top-[18vh] max-w-xl translate-y-0"
+        className="top-[18vh] max-w-xl translate-y-0 overflow-hidden p-0"
         showCloseButton={false}
         aria-describedby={undefined}
       >
-        <div className="flex h-14 items-center gap-3 border-b border-border px-4">
-          <Search size={17} className="text-muted" />
+        <div className="flex h-12 items-center gap-3 border-b border-[#1c1c1c] px-4">
+          <Search size={16} className="text-muted-foreground" />
           <input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.key === "Escape" && onClose()}
             placeholder="Search your notes"
-            className="h-full flex-1 bg-transparent text-sm outline-none placeholder:text-[#666]"
+            className="h-full flex-1 bg-transparent text-[13px] leading-[1.2] tracking-[-0.01em] outline-none placeholder:text-[#555]"
           />
-          <kbd className="font-mono text-[10px] text-muted">ESC</kbd>
+          <kbd className="font-mono text-[10px] text-muted-foreground">ESC</kbd>
         </div>
-        <div className="max-h-[55vh] overflow-y-auto p-2">
+        <div className="max-h-[55vh] overflow-y-auto p-1.5">
           {query && results.length === 0 ? (
-            <p className="px-3 py-8 text-center text-xs text-muted">
+            <p className="px-3 py-8 text-center text-[13px] text-muted-foreground">
               No matching notes
             </p>
           ) : null}
@@ -73,14 +73,16 @@ export function SearchDialog({
                 onOpenNote(result.id);
                 onClose();
               }}
-              className="block w-full border-b border-[#161616] px-3 py-3 text-left last:border-0 hover:bg-[#111]"
+              className="block w-full rounded-[6px] px-3 py-2.5 text-left hover:bg-[#1a1a1a]"
             >
-              <span className="block text-sm">{result.title}</span>
-              <span className="mt-1 block text-[11px] text-muted">
+              <span className="block text-[13px] leading-5 tracking-[-0.01em]">
+                {result.title}
+              </span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
                 {result.path}
               </span>
               {result.snippet ? (
-                <span className="mt-2 block truncate text-xs text-[#777]">
+                <span className="mt-1.5 block truncate text-[12px] leading-4 text-[#777]">
                   {result.snippet.replaceAll(/<\/?mark>/g, "")}
                 </span>
               ) : null}

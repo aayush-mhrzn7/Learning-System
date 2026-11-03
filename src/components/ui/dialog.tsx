@@ -9,7 +9,9 @@ export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
 
-export function DialogPortal(props: ComponentProps<typeof DialogPrimitive.Portal>) {
+export function DialogPortal(
+  props: ComponentProps<typeof DialogPrimitive.Portal>,
+) {
   return <DialogPrimitive.Portal {...props} />;
 }
 
@@ -19,10 +21,7 @@ export function DialogOverlay({
 }: ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
-      className={cn(
-        "fixed inset-0 z-50 bg-black/75 backdrop-blur-[3px] data-[state=closed]:animate-out data-[state=open]:animate-in",
-        className,
-      )}
+      className={cn("fixed inset-0 z-50 bg-black/70", className)}
       {...props}
     />
   );
@@ -41,15 +40,15 @@ export function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 border border-[#2b2b2b] bg-[#090909] shadow-2xl outline-none",
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-popover p-5 text-popover-foreground shadow-2xl outline-none",
           className,
         )}
         {...props}
       >
         {children}
         {showCloseButton ? (
-          <DialogPrimitive.Close className="absolute right-4 top-4 grid h-7 w-7 place-items-center text-muted transition-colors hover:bg-[#171717] hover:text-foreground">
-            <X size={15} />
+          <DialogPrimitive.Close className="absolute top-3 right-3 grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <X className="size-3.5" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         ) : null}
@@ -62,7 +61,7 @@ export function DialogHeader({
   className,
   ...props
 }: ComponentProps<"div">) {
-  return <div className={cn("space-y-1.5 px-5 pt-5", className)} {...props} />;
+  return <div className={cn("flex flex-col gap-1.5 pr-8", className)} {...props} />;
 }
 
 export function DialogFooter({
@@ -71,10 +70,7 @@ export function DialogFooter({
 }: ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "flex items-center justify-end gap-2 border-t border-border px-5 py-4",
-        className,
-      )}
+      className={cn("mt-4 flex items-center justify-end gap-2", className)}
       {...props}
     />
   );
@@ -86,7 +82,10 @@ export function DialogTitle({
 }: ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn("text-sm font-medium", className)}
+      className={cn(
+        "text-sm font-medium tracking-tight text-foreground",
+        className,
+      )}
       {...props}
     />
   );
@@ -98,7 +97,7 @@ export function DialogDescription({
 }: ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn("text-xs leading-5 text-muted", className)}
+      className={cn("text-xs leading-5 text-muted-foreground", className)}
       {...props}
     />
   );

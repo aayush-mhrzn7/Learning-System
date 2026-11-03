@@ -335,7 +335,7 @@ export function NoteEditor({
 
   if (!payload || !editor) {
     return (
-      <div className="grid h-screen flex-1 place-items-center text-xs text-muted">
+      <div className="grid h-screen flex-1 place-items-center text-xs text-muted-foreground">
         Loading note…
       </div>
     );
@@ -357,7 +357,7 @@ export function NoteEditor({
             <PanelLeftOpen size={16} />
           </button>
         ) : null}
-        <span className="text-[9px] uppercase tracking-[0.16em] text-muted">
+        <span className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
           {payload.note.status}
         </span>
         {payload.note.editedSincePublish ? (
@@ -400,7 +400,7 @@ export function NoteEditor({
       <FormattingToolbar editor={editor} />
 
       <div className="flex-1 overflow-y-auto">
-        <article className="w-full px-8 pb-32 pt-16 sm:px-14 lg:px-20">
+        <article className="w-full px-8 pb-32 pt-10 sm:px-14 lg:px-20">
           <input
             value={title}
             onChange={(event) => {
@@ -415,7 +415,7 @@ export function NoteEditor({
                 scheduleSave();
               }
             }}
-            className="mb-8 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444]"
+            className="mb-3 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444]"
             placeholder="Untitled"
             aria-label="Note title"
           />
@@ -453,7 +453,7 @@ export function NoteEditor({
               <div className="mb-5 flex items-center gap-3">
                 <h2 className="text-sm font-medium">What’s missing</h2>
                 {gapsLoading ? (
-                  <LoaderCircle size={13} className="animate-spin text-muted" />
+                  <LoaderCircle size={13} className="animate-spin text-muted-foreground" />
                 ) : null}
                 <Button
                   type="button"
@@ -467,7 +467,7 @@ export function NoteEditor({
                 </Button>
               </div>
               {analysisLength < 500 ? (
-                <p className="text-xs text-muted">
+                <p className="text-xs text-muted-foreground">
                   Write {500 - analysisLength} more non-code characters to
                   unlock gap analysis.
                 </p>
@@ -475,14 +475,14 @@ export function NoteEditor({
               {analysisLength >= 500 &&
               !gapsLoading &&
               payload.checklist.length === 0 ? (
-                <p className="flex items-center gap-2 text-sm text-muted">
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CheckCircle2 size={15} />
                   {gapsMessage ||
                     "Analyze this learning note when you’re ready."}
                 </p>
               ) : null}
               {gapsMessage && payload.checklist.length > 0 ? (
-                <p className="mb-4 text-xs text-muted">{gapsMessage}</p>
+                <p className="mb-4 text-xs text-muted-foreground">{gapsMessage}</p>
               ) : null}
               <div className="space-y-3">
                 {payload.checklist.map((item) => (
@@ -504,7 +504,7 @@ export function NoteEditor({
                     </button>
                     <span
                       className={
-                        item.ticked ? "text-muted line-through" : undefined
+                        item.ticked ? "text-muted-foreground line-through" : undefined
                       }
                     >
                       {item.text}
@@ -526,7 +526,7 @@ export function NoteEditor({
           }}
           onMouseLeave={() => setHovered(null)}
         >
-          <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted">
+          <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             {hovered.claim.stale
               ? "Stale result"
               : hovered.claim.verdict}
@@ -542,7 +542,7 @@ export function NoteEditor({
                   href={source.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block truncate text-[11px] text-muted underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                  className="block truncate text-[11px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
                 >
                   {source.title}
                 </a>

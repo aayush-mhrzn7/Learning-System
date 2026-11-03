@@ -42,7 +42,7 @@ function LoginForm() {
   return (
     <main className="grid min-h-screen place-items-center bg-background px-6">
       <form onSubmit={submit} className="w-full max-w-xs">
-        <p className="mb-10 text-xs uppercase tracking-[0.28em] text-muted">
+        <p className="mb-10 text-xs uppercase tracking-[0.28em] text-muted-foreground">
           Learning System
         </p>
         <h1 className="mb-8 text-2xl font-medium tracking-tight">

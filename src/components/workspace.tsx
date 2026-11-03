@@ -4,8 +4,8 @@ import { FolderPlus, PanelLeftOpen } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NoteEditor } from "@/components/note-editor";
 import { SearchDialog } from "@/components/search-dialog";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { Sidebar } from "@/components/sidebar";
-import { TrashDialog } from "@/components/trash-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,7 +30,7 @@ export function Workspace() {
       : localStorage.getItem("learning-sidebar-collapsed") === "true",
   );
   const [searchOpen, setSearchOpen] = useState(false);
-  const [trashOpen, setTrashOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [firstDirectoryOpen, setFirstDirectoryOpen] = useState(false);
   const [firstDirectoryName, setFirstDirectoryName] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -94,6 +94,10 @@ export function Workspace() {
         event.preventDefault();
         setSearchOpen(true);
       }
+      if (event.ctrlKey && !event.metaKey && event.key === ",") {
+        event.preventDefault();
+        setSettingsOpen(true);
+      }
       if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
         event.preventDefault();
         setSidebarCollapsed((current) => {
@@ -106,11 +110,11 @@ export function Workspace() {
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
-        setTrashOpen(false);
+        setSettingsOpen(false);
       }
     }
-    window.addEventListener("keydown", shortcuts);
-    return () => window.removeEventListener("keydown", shortcuts);
+    window.addEventListener("keydown", shortcuts, true);
+    return () => window.removeEventListener("keydown", shortcuts, true);
   }, []);
 
   function collapseSidebar() {
@@ -150,7 +154,7 @@ export function Workspace() {
 
   if (!loaded) {
     return (
-      <main className="grid min-h-screen place-items-center text-xs text-muted">
+      <main className="grid min-h-screen place-items-center text-xs text-muted-foreground">
         Loading…
       </main>
     );
@@ -158,7 +162,7 @@ export function Workspace() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      {!sidebarCollapsed ? (
+      <div className={sidebarCollapsed ? "hidden" : undefined}>
         <Sidebar
           tree={tree}
           selectedNoteId={selectedNoteId}
@@ -167,9 +171,8 @@ export function Workspace() {
           onOptimisticTree={applyOptimisticTree}
           onCollapse={collapseSidebar}
           onSearch={() => setSearchOpen(true)}
-          onTrash={() => setTrashOpen(true)}
         />
-      ) : null}
+      </div>
 
       {selectedNoteId ? (
         <NoteEditor
@@ -191,16 +194,13 @@ export function Workspace() {
             </button>
           ) : null}
           <div className="text-center">
-            <p className="mb-6 text-sm text-muted">
+            <p className="mb-6 text-sm text-muted-foreground">
               Create a directory to begin.
             </p>
-            <button
-              onClick={() => setFirstDirectoryOpen(true)}
-              className="inline-flex h-10 items-center gap-2 bg-foreground px-4 text-xs font-medium text-background"
-            >
+            <Button onClick={() => setFirstDirectoryOpen(true)}>
               <FolderPlus size={14} />
               New directory
-            </button>
+            </Button>
           </div>
         </main>
       )}
@@ -210,10 +210,9 @@ export function Workspace() {
         onClose={() => setSearchOpen(false)}
         onOpenNote={openNote}
       />
-      <TrashDialog
-        open={trashOpen}
-        onClose={() => setTrashOpen(false)}
-        onChanged={loadTree}
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
       <Dialog
         open={firstDirectoryOpen}
@@ -233,7 +232,7 @@ export function Workspace() {
                 or nested directories.
               </DialogDescription>
             </DialogHeader>
-            <div className="px-5 py-5">
+            <div className="mt-3">
               <Input
                 autoFocus
                 value={firstDirectoryName}
@@ -244,12 +243,15 @@ export function Workspace() {
             <DialogFooter>
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 onClick={() => setFirstDirectoryOpen(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit">Create</Button>
+              <Button type="submit" size="sm">
+                Create
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

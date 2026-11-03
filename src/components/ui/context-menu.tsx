@@ -16,7 +16,7 @@ export function ContextMenuContent({
     <ContextMenuPortal>
       <ContextMenuPrimitive.Content
         className={cn(
-          "z-[120] min-w-40 border border-[#303030] bg-[#101010] p-1 shadow-2xl outline-none",
+          "z-[120] min-w-44 overflow-hidden rounded-[8px] border border-[#262626] bg-[#111] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.55)] outline-none",
           className,
         )}
         {...props}
@@ -33,7 +33,7 @@ export function ContextMenuItem({
   return (
     <ContextMenuPrimitive.Item
       className={cn(
-        "flex h-8 cursor-default select-none items-center gap-2 px-2 text-xs text-[#ccc] outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-[#222] data-[highlighted]:text-white",
+        "flex h-8 cursor-default select-none items-center gap-2 rounded-[5px] px-2.5 text-[12.5px] leading-[1.2] tracking-[-0.01em] text-[#ccc] outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-[#1a1a1a] data-[highlighted]:text-white",
         inset && "pl-8",
         className,
       )}

@@ -7,25 +7,14 @@ import {
   FilePlus2,
   Folder,
   FolderPlus,
-  LogOut,
   Pencil,
   PanelLeftClose,
   Search,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -43,6 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { directoryDeleteMatchSchema } from "@/lib/schemas";
 import type {
   DirectoryItem,
   NoteSummary,
@@ -57,7 +47,6 @@ type SidebarProps = {
   onOptimisticTree: (updater: (tree: TreePayload) => TreePayload) => void;
   onCollapse: () => void;
   onSearch: () => void;
-  onTrash: () => void;
 };
 
 type EditAction =
@@ -84,6 +73,8 @@ export function Sidebar(props: SidebarProps) {
   const router = useRouter();
   const [editAction, setEditAction] = useState<EditAction | null>(null);
   const [deleteAction, setDeleteAction] = useState<DeleteAction | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
@@ -111,6 +102,95 @@ export function Sidebar(props: SidebarProps) {
   function rollback(previous: TreePayload, message: string) {
     props.onOptimisticTree(() => previous);
     toast.error(message);
+  }
+
+  function openDelete(action: DeleteAction) {
+    setDeleteAction(action);
+    setDeleteConfirmation("");
+    setDeleteError("");
+  }
+
+  function closeDelete() {
+    setDeleteAction(null);
+    setDeleteConfirmation("");
+    setDeleteError("");
+  }
+
+  function descendantDirectoryIds(rootId: string) {
+    const ids = new Set([rootId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const directory of props.tree.directories) {
+        if (
+          directory.parentId &&
+          ids.has(directory.parentId) &&
+          !ids.has(directory.id)
+        ) {
+          ids.add(directory.id);
+          changed = true;
+        }
+      }
+    }
+    return ids;
+  }
+
+  async function confirmDelete(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!deleteAction) return;
+
+    if (deleteAction.kind === "directory") {
+      const parsed = directoryDeleteMatchSchema(deleteAction.name).safeParse({
+        confirmation: deleteConfirmation,
+      });
+      if (!parsed.success) {
+        setDeleteError(
+          parsed.error.issues[0]?.message ?? "Type the directory name",
+        );
+        return;
+      }
+    }
+
+    const previous = props.tree;
+    const action = deleteAction;
+    const confirmation = deleteConfirmation;
+    closeDelete();
+
+    if (action.kind === "note") {
+      props.onOptimisticTree((tree) => ({
+        ...tree,
+        notes: tree.notes.filter((note) => note.id !== action.id),
+      }));
+    } else {
+      const removed = descendantDirectoryIds(action.id);
+      props.onOptimisticTree((tree) => ({
+        directories: tree.directories.filter(
+          (directory) => !removed.has(directory.id),
+        ),
+        notes: tree.notes.filter((note) => !removed.has(note.directoryId)),
+      }));
+    }
+
+    const endpoint =
+      action.kind === "note"
+        ? `/api/notes/${action.id}`
+        : `/api/directories/${action.id}`;
+    const response = await fetch(endpoint, {
+      method: "DELETE",
+      headers:
+        action.kind === "directory"
+          ? { "Content-Type": "application/json" }
+          : undefined,
+      body:
+        action.kind === "directory"
+          ? JSON.stringify({ confirmation })
+          : undefined,
+    });
+    if (!response.ok) {
+      rollback(previous, "Could not move item to Trash");
+      return;
+    }
+    toast.success("Moved to Trash");
   }
 
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
@@ -237,59 +317,6 @@ export function Sidebar(props: SidebarProps) {
     }
   }
 
-  function descendantDirectoryIds(rootId: string) {
-    const ids = new Set([rootId]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const directory of props.tree.directories) {
-        if (
-          directory.parentId &&
-          ids.has(directory.parentId) &&
-          !ids.has(directory.id)
-        ) {
-          ids.add(directory.id);
-          changed = true;
-        }
-      }
-    }
-    return ids;
-  }
-
-  async function confirmDelete() {
-    if (!deleteAction) return;
-    const previous = props.tree;
-    setDeleteAction(null);
-
-    if (deleteAction.kind === "note") {
-      props.onOptimisticTree((tree) => ({
-        ...tree,
-        notes: tree.notes.filter((note) => note.id !== deleteAction.id),
-      }));
-    } else {
-      const removed = descendantDirectoryIds(deleteAction.id);
-      props.onOptimisticTree((tree) => ({
-        directories: tree.directories.filter(
-          (directory) => !removed.has(directory.id),
-        ),
-        notes: tree.notes.filter(
-          (note) => !removed.has(note.directoryId),
-        ),
-      }));
-    }
-
-    const endpoint =
-      deleteAction.kind === "note"
-        ? `/api/notes/${deleteAction.id}`
-        : `/api/directories/${deleteAction.id}`;
-    const response = await fetch(endpoint, { method: "DELETE" });
-    if (!response.ok) {
-      rollback(previous, "Could not move item to Trash");
-      return;
-    }
-    toast.success("Moved to Trash");
-  }
-
   const roots = useMemo(
     () =>
       props.tree.directories
@@ -297,6 +324,67 @@ export function Sidebar(props: SidebarProps) {
         .sort((a, b) => a.name.localeCompare(b.name)),
     [props.tree.directories],
   );
+
+  const currentDirectoryId = useMemo(() => {
+    if (props.selectedNoteId) {
+      const note = props.tree.notes.find(
+        (item) => item.id === props.selectedNoteId,
+      );
+      if (note) return note.directoryId;
+    }
+    return roots[0]?.id ?? null;
+  }, [props.selectedNoteId, props.tree.notes, roots]);
+
+  function startCreateNote(directoryId?: string | null) {
+    const target = directoryId ?? currentDirectoryId;
+    if (!target) {
+      toast.error("Create a directory first");
+      setEditAction({
+        kind: "directory",
+        mode: "create",
+        parentId: null,
+        value: "",
+      });
+      return;
+    }
+    setEditAction({
+      kind: "note",
+      mode: "create",
+      directoryId: target,
+      value: "Untitled",
+    });
+  }
+
+  function startCreateDirectory(parentId: string | null = currentDirectoryId) {
+    setEditAction({
+      kind: "directory",
+      mode: "create",
+      parentId,
+      value: "",
+    });
+  }
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (editAction || deleteAction) return;
+      if (event.key.toLowerCase() !== "n") return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      // ⌘N / ⌘⇧N are reserved by Chrome; only Ctrl+N / Ctrl+⇧N are used.
+      if (!event.ctrlKey || event.metaKey || event.altKey) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.shiftKey) startCreateDirectory(currentDirectoryId);
+      else startCreateNote(currentDirectoryId);
+    }
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [currentDirectoryId, deleteAction, editAction]);
 
   return (
     <aside className="flex h-screen w-72 shrink-0 flex-col border-r border-border bg-[#080808]">
@@ -315,125 +403,108 @@ export function Sidebar(props: SidebarProps) {
 
       <button
         onClick={props.onSearch}
-        className="mx-3 mt-3 flex h-9 items-center gap-2 border border-border px-3 text-left text-xs text-muted transition-colors hover:border-[#444] hover:text-foreground"
+        className="mx-3 mt-3 flex h-9 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-[#444] hover:text-foreground"
       >
         <Search size={14} />
         Search
         <kbd className="ml-auto font-mono text-[10px]">⌘K</kbd>
       </button>
 
-      <div className="flex-1 overflow-y-auto px-2 py-4">
-        {roots.length ? (
-          roots.map((directory) => (
-            <DirectoryNode
-              key={directory.id}
-              directory={directory}
-              directories={props.tree.directories}
-              notes={props.tree.notes}
-              expanded={expanded}
-              selectedNoteId={props.selectedNoteId}
-              onToggle={toggle}
-              onCreateDirectory={(parentId) =>
-                setEditAction({
-                  kind: "directory",
-                  mode: "create",
-                  parentId,
-                  value: "",
-                })
-              }
-              onCreateNote={(directoryId) =>
-                setEditAction({
-                  kind: "note",
-                  mode: "create",
-                  directoryId,
-                  value: "Untitled",
-                })
-              }
-              onRenameDirectory={(directory) =>
-                setEditAction({
-                  kind: "directory",
-                  mode: "rename",
-                  parentId: directory.parentId,
-                  id: directory.id,
-                  value: directory.name,
-                })
-              }
-              onRenameNote={(note) =>
-                setEditAction({
-                  kind: "note",
-                  mode: "rename",
-                  directoryId: note.directoryId,
-                  id: note.id,
-                  value: note.title,
-                })
-              }
-              onDeleteDirectory={(directory) =>
-                setDeleteAction({
-                  kind: "directory",
-                  id: directory.id,
-                  name: directory.name,
-                })
-              }
-              onDeleteNote={(note) =>
-                setDeleteAction({
-                  kind: "note",
-                  id: note.id,
-                  name: note.title,
-                })
-              }
-              onOpenNote={props.onOpenNote}
-            />
-          ))
-        ) : (
-          <button
-            onClick={() =>
-              setEditAction({
-                kind: "directory",
-                mode: "create",
-                parentId: null,
-                value: "",
-              })
-            }
-            className="flex w-full items-center gap-2 px-2 py-2 text-xs text-muted hover:text-foreground"
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="flex-1 overflow-y-auto px-2 py-4">
+            {roots.length ? (
+              roots.map((directory) => (
+                <DirectoryNode
+                  key={directory.id}
+                  directory={directory}
+                  directories={props.tree.directories}
+                  notes={props.tree.notes}
+                  expanded={expanded}
+                  selectedNoteId={props.selectedNoteId}
+                  onToggle={toggle}
+                  onCreateDirectory={(parentId) =>
+                    startCreateDirectory(parentId)
+                  }
+                  onCreateNote={(directoryId) => startCreateNote(directoryId)}
+                  onRenameDirectory={(directory) =>
+                    setEditAction({
+                      kind: "directory",
+                      mode: "rename",
+                      parentId: directory.parentId,
+                      id: directory.id,
+                      value: directory.name,
+                    })
+                  }
+                  onRenameNote={(note) =>
+                    setEditAction({
+                      kind: "note",
+                      mode: "rename",
+                      directoryId: note.directoryId,
+                      id: note.id,
+                      value: note.title,
+                    })
+                  }
+                  onDeleteDirectory={(directory) =>
+                    openDelete({
+                      kind: "directory",
+                      id: directory.id,
+                      name: directory.name,
+                    })
+                  }
+                  onDeleteNote={(note) =>
+                    openDelete({
+                      kind: "note",
+                      id: note.id,
+                      name: note.title,
+                    })
+                  }
+                  onOpenNote={props.onOpenNote}
+                />
+              ))
+            ) : (
+              <button
+                onClick={() => startCreateDirectory(null)}
+                className="flex w-full items-center gap-2 px-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <FolderPlus size={14} />
+                New directory
+              </button>
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={() => startCreateNote(currentDirectoryId)}>
+            <FilePlus2 size={14} />
+            New note
+            <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">
+              ⌃N
+            </kbd>
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => startCreateDirectory(currentDirectoryId)}
           >
             <FolderPlus size={14} />
             New directory
-          </button>
-        )}
-      </div>
+            <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">
+              ⌃⇧N
+            </kbd>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => startCreateDirectory(null)}>
+            <FolderPlus size={14} />
+            New root directory
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
 
       <div className="border-t border-border p-2">
         <button
-          onClick={() =>
-            setEditAction({
-              kind: "directory",
-              mode: "create",
-              parentId: null,
-              value: "",
-            })
-          }
-          className="sidebar-row w-full text-muted hover:text-foreground"
-        >
-          <FolderPlus size={14} />
-          New directory
-        </button>
-        <button
-          onClick={props.onTrash}
-          className="sidebar-row w-full text-muted hover:text-foreground"
+          onClick={() => router.push("/trash")}
+          className="sidebar-row w-full text-muted-foreground hover:text-foreground"
         >
           <Trash2 size={14} />
           Trash
-        </button>
-        <button
-          onClick={async () => {
-            await fetch("/api/auth/logout", { method: "POST" });
-            router.replace("/login");
-            router.refresh();
-          }}
-          className="sidebar-row w-full text-muted hover:text-foreground"
-        >
-          <LogOut size={14} />
-          Lock
         </button>
       </div>
 
@@ -455,7 +526,7 @@ export function Sidebar(props: SidebarProps) {
                   : "Directories can contain notes and other directories."}
               </DialogDescription>
             </DialogHeader>
-            <div className="px-5 py-5">
+            <div className="mt-3">
               <Input
                 autoFocus
                 value={editAction?.value ?? ""}
@@ -474,12 +545,13 @@ export function Sidebar(props: SidebarProps) {
             <DialogFooter>
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 onClick={() => setEditAction(null)}
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" size="sm" disabled={submitting}>
                 {submitting ? "Saving…" : "Save"}
               </Button>
             </DialogFooter>
@@ -487,27 +559,77 @@ export function Sidebar(props: SidebarProps) {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
+      <Dialog
         open={Boolean(deleteAction)}
-        onOpenChange={(open) => !open && setDeleteAction(null)}
+        onOpenChange={(open) => !open && closeDelete()}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteAction?.kind === "directory"
-                ? `“${deleteAction.name}” and everything inside it will move to Trash.`
-                : `“${deleteAction?.name}” will move to Trash.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmDelete()}>
-              Move to Trash
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <DialogContent>
+          <form onSubmit={confirmDelete} noValidate>
+            <DialogHeader>
+              <DialogTitle>Move to Trash?</DialogTitle>
+              <DialogDescription>
+                {deleteAction?.kind === "directory"
+                  ? `“${deleteAction.name}” and everything inside it will move to Trash.`
+                  : `“${deleteAction?.name}” will move to Trash.`}
+              </DialogDescription>
+            </DialogHeader>
+            {deleteAction?.kind === "directory" ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <label
+                  htmlFor="delete-confirmation"
+                  className="block text-xs leading-5 text-muted-foreground"
+                >
+                  Type{" "}
+                  <span className="font-mono text-foreground">
+                    {deleteAction.name}
+                  </span>{" "}
+                  to confirm
+                </label>
+                <Input
+                  id="delete-confirmation"
+                  autoFocus
+                  value={deleteConfirmation}
+                  onChange={(event) => {
+                    setDeleteConfirmation(event.target.value);
+                    setDeleteError("");
+                  }}
+                  placeholder={deleteAction.name}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {deleteError ? (
+                  <p className="font-mono text-xs leading-5 text-destructive">
+                    {deleteError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={closeDelete}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="destructive"
+                size="sm"
+                disabled={
+                  deleteAction?.kind === "directory" &&
+                  !directoryDeleteMatchSchema(deleteAction.name).safeParse({
+                    confirmation: deleteConfirmation,
+                  }).success
+                }
+              >
+                Move to Trash
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }
@@ -579,7 +701,7 @@ function DirectoryNode(props: DirectoryNodeProps) {
             onSelect={() => props.onCreateDirectory(props.directory.id)}
           >
             <FolderPlus size={14} />
-            New sub-directory
+            New directory
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem
@@ -615,7 +737,7 @@ function DirectoryNode(props: DirectoryNodeProps) {
                   className={`sidebar-row w-full truncate ${
                     props.selectedNoteId === note.id
                       ? "bg-[#171717] text-foreground"
-                      : "text-muted hover:bg-[#111] hover:text-foreground"
+                      : "text-muted-foreground hover:bg-[#111] hover:text-foreground"
                   }`}
                 >
                   <FileText size={13} className="shrink-0 opacity-60" />

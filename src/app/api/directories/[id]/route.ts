@@ -1,9 +1,32 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { directories } from "@/db/schema";
-import { directoryUpdateSchema, idSchema } from "@/lib/schemas";
+import {
+  directoryDeleteMatchSchema,
+  directoryUpdateSchema,
+  idSchema,
+} from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
+
+export async function GET(_request: Request, context: Context) {
+  const { id } = await context.params;
+  if (!idSchema.safeParse(id).success) {
+    return Response.json({ error: "Invalid directory" }, { status: 400 });
+  }
+
+  const [directory] = await db
+    .select()
+    .from(directories)
+    .where(and(eq(directories.id, id), isNull(directories.deletedAt)))
+    .limit(1);
+
+  if (!directory) {
+    return Response.json({ error: "Directory not found" }, { status: 404 });
+  }
+
+  return Response.json({ directory });
+}
 
 export async function PATCH(request: Request, context: Context) {
   const { id } = await context.params;
@@ -25,10 +48,33 @@ export async function PATCH(request: Request, context: Context) {
   return Response.json({ directory });
 }
 
-export async function DELETE(_request: Request, context: Context) {
+export async function DELETE(request: Request, context: Context) {
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid directory" }, { status: 400 });
+  }
+
+  const [directory] = await db
+    .select({ id: directories.id, name: directories.name })
+    .from(directories)
+    .where(and(eq(directories.id, id), isNull(directories.deletedAt)))
+    .limit(1);
+
+  if (!directory) {
+    return Response.json({ error: "Directory not found" }, { status: 404 });
+  }
+
+  const body = directoryDeleteMatchSchema(directory.name).safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!body.success) {
+    return Response.json(
+      {
+        error: "Confirmation failed",
+        issues: body.error.flatten(),
+      },
+      { status: 400 },
+    );
   }
 
   const batchId = crypto.randomUUID();

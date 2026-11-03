@@ -11,6 +11,22 @@ export const directoryUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
 
+export const directoryDeleteSchema = z.object({
+  confirmation: z.string().trim().min(1, "Type the directory name to confirm"),
+});
+
+export function directoryDeleteMatchSchema(expectedName: string) {
+  return directoryDeleteSchema.superRefine((value, ctx) => {
+    if (value.confirmation !== expectedName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["confirmation"],
+        message: "Name does not match",
+      });
+    }
+  });
+}
+
 export const noteCreateSchema = z.object({
   directoryId: z.uuid(),
   title: z.string().trim().min(1).max(200).default("Untitled"),
