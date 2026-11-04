@@ -15,7 +15,14 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +47,18 @@ import type {
   NoteSummary,
   TreePayload,
 } from "@/lib/types";
+
+const SIDEBAR_WIDTH_KEY = "learning-sidebar-width";
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 480;
+const SIDEBAR_DEFAULT_WIDTH = 288;
+
+function readSidebarWidth() {
+  if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
+  const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  if (!Number.isFinite(raw)) return SIDEBAR_DEFAULT_WIDTH;
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, raw));
+}
 
 type SidebarProps = {
   tree: TreePayload;
@@ -87,6 +106,51 @@ export function Sidebar(props: SidebarProps) {
     const stored = localStorage.getItem("learning-expanded-directories");
     return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
   });
+  const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    setWidth(readSidebarWidth());
+  }, []);
+
+  const onResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      dragging.current = true;
+      const startX = event.clientX;
+      const startWidth = width;
+      const target = event.currentTarget;
+      target.setPointerCapture(event.pointerId);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      function onMove(moveEvent: PointerEvent) {
+        if (!dragging.current) return;
+        const next = Math.min(
+          SIDEBAR_MAX_WIDTH,
+          Math.max(SIDEBAR_MIN_WIDTH, startWidth + (moveEvent.clientX - startX)),
+        );
+        setWidth(next);
+      }
+
+      function onUp(upEvent: PointerEvent) {
+        dragging.current = false;
+        target.releasePointerCapture(upEvent.pointerId);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        setWidth((current) => {
+          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(current));
+          return current;
+        });
+      }
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [width],
+  );
 
   function toggle(id: string) {
     setExpanded((current) => {
@@ -461,7 +525,34 @@ export function Sidebar(props: SidebarProps) {
   ]);
 
   return (
-    <aside className="flex h-screen w-72 shrink-0 flex-col border-r border-border bg-[#080808]">
+    <aside
+      className="relative flex h-screen shrink-0 flex-col border-r border-border bg-[#080808]"
+      style={{ width }}
+    >
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        aria-valuemin={SIDEBAR_MIN_WIDTH}
+        aria-valuemax={SIDEBAR_MAX_WIDTH}
+        aria-valuenow={width}
+        tabIndex={0}
+        onPointerDown={onResizePointerDown}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          setWidth((current) => {
+            const delta = event.key === "ArrowRight" ? 16 : -16;
+            const next = Math.min(
+              SIDEBAR_MAX_WIDTH,
+              Math.max(SIDEBAR_MIN_WIDTH, current + delta),
+            );
+            localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+            return next;
+          });
+        }}
+        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-white/10 active:bg-white/20"
+      />
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <span className="text-xs font-medium uppercase tracking-[0.2em]">
           Learning

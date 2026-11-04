@@ -1,7 +1,13 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { claims, notes } from "@/db/schema";
-import { extractClaims, judgeClaim, mapPool } from "@/lib/ai";
+import {
+  decideClaims,
+  extractClaims,
+  judgeClaim,
+  mapPool,
+  shouldWebCheckClaim,
+} from "@/lib/ai";
 import { requireUserId } from "@/lib/auth";
 import { documentToText } from "@/lib/editor-text";
 import { resolveActiveProviderCredentials } from "@/lib/provider-credentials";
@@ -61,10 +67,39 @@ export async function POST(_request: Request, context: Context) {
         const noteText = documentToText(note.content, { skipCode: true });
         const extracted = await extractClaims(credentials, noteText);
         await db.delete(claims).where(eq(claims.noteId, id));
-        send({ type: "start", total: extracted.length });
+        for (const [index, claim] of extracted.entries()) {
+          send({
+            type: "extracted",
+            index: index + 1,
+            total: extracted.length,
+            text: claim.text,
+          });
+        }
+
+        send({ type: "scoring", total: extracted.length });
+        const decided = await decideClaims(credentials, extracted);
+        for (const [index, claim] of decided.entries()) {
+          send({
+            type: "scored",
+            index: index + 1,
+            total: decided.length,
+            text: claim.text,
+            score: claim.score,
+            check: shouldWebCheckClaim(claim.score),
+          });
+        }
+        const toCheck = decided.filter((claim) =>
+          shouldWebCheckClaim(claim.score),
+        );
+        send({
+          type: "start",
+          total: toCheck.length,
+          skipped: decided.length - toCheck.length,
+        });
 
         let failed = 0;
-        await mapPool(extracted, JUDGE_CONCURRENCY, async ({ text }) => {
+        await mapPool(toCheck, JUDGE_CONCURRENCY, async ({ text, score }) => {
+          send({ type: "checking", text, score });
           try {
             const verdict = await judgeClaim(credentials, text);
             const [claim] = await db
@@ -77,12 +112,13 @@ export async function POST(_request: Request, context: Context) {
                 sources: verdict.sources,
               })
               .returning();
-            send({ type: "claim", claim });
+            send({ type: "claim", claim, score });
           } catch (error) {
             failed += 1;
             send({
               type: "claim_error",
               claimText: text,
+              score,
               error: error instanceof Error ? error.message : "Check failed",
             });
           }

@@ -5,7 +5,11 @@ import {
   setActiveProvider,
   upsertProviderCredential,
 } from "@/lib/provider-credentials";
-import { isProviderId, PROVIDER_DEFAULTS } from "@/lib/providers";
+import {
+  isEnabledProviderId,
+  isProviderId,
+  PROVIDER_DEFAULTS,
+} from "@/lib/providers";
 
 export async function GET() {
   const { userId, error } = await requireUserId();
@@ -36,6 +40,12 @@ export async function PUT(request: Request) {
   const body = await request.json().catch(() => null);
   const asActive = activeSchema.safeParse(body);
   if (asActive.success && Object.keys(body ?? {}).length === 1) {
+    if (!isEnabledProviderId(asActive.data.activeProvider)) {
+      return Response.json(
+        { error: "OpenRouter is disabled. Use ChatGPT for now." },
+        { status: 400 },
+      );
+    }
     try {
       await setActiveProvider(userId, asActive.data.activeProvider);
       const settings = await getProviderSettingsView(userId);
@@ -59,6 +69,12 @@ export async function PUT(request: Request) {
   }
 
   const provider = parsed.data.provider;
+  if (!isEnabledProviderId(provider)) {
+    return Response.json(
+      { error: "OpenRouter is disabled. Use ChatGPT for now." },
+      { status: 400 },
+    );
+  }
   try {
     await upsertProviderCredential({
       userId,

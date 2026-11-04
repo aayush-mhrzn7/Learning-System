@@ -1,8 +1,15 @@
 import OpenAI from "openai";
 import { z } from "zod";
-import type { ResolvedProviderCredentials } from "@/lib/providers";
+import {
+  DECISIONS_MODEL,
+  type ResolvedProviderCredentials,
+} from "@/lib/providers";
 
 const EXTRACT_CHUNK_CHARS = 2800;
+const DECISION_BATCH_SIZE = 40;
+
+/** Only claims scoring above this get a paid web Responses call. */
+export const CLAIM_WEB_CHECK_THRESHOLD = 0.8;
 
 const extractedClaimsSchema = z.object({
   claims: z.array(
@@ -341,11 +348,14 @@ const claimsSchemaPayload = {
 } as const;
 
 const extractInstructions = [
-  "Extract independently verifiable prose claims from the note.",
+  "Extract only independently verifiable factual assertions from the note.",
+  "A claim must assert something about the world, a system, a definition, a mechanism, a number, or a causal relationship that could be true or false.",
   "Return each claim using the exact contiguous text from the note.",
   "Do not rewrite, normalize, summarize, or include opinions.",
-  "Skip headings that are only labels and skip incomplete fragments.",
-  "Prefer at most 20 claims from this passage.",
+  "Skip headings, incomplete fragments, transitions, examples framed as illustration only,",
+  "and any sentence that is mainly about the note's writing quality, missing explanation, chunk boundaries, clarity, or retrieval usefulness.",
+  "Skip pedagogical meta like 'X introduces Y but does not explain…' or 'this can negatively affect…' unless it asserts a checkable technical fact.",
+  "Prefer at most 12 claims from this passage.",
 ].join(" ");
 
 export async function extractClaims(
@@ -375,6 +385,95 @@ export async function extractClaims(
     claims.push({ text: claim.text.trim() });
   }
   return claims;
+}
+
+export function shouldWebCheckClaim(score: number) {
+  return score > CLAIM_WEB_CHECK_THRESHOLD;
+}
+
+/**
+ * OpenAI Decisions API (`gpt-6-luna`): predicate probability per claim.
+ * High probability = concrete, checkable fact worth a paid web Responses call.
+ */
+export async function decideClaims(
+  credentials: ResolvedProviderCredentials,
+  claims: { text: string }[],
+): Promise<{ text: string; score: number }[]> {
+  if (claims.length === 0) return [];
+  if (credentials.provider !== "gpt") {
+    throw new Error(
+      "OpenAI Decisions requires a ChatGPT API key. OpenRouter is disabled.",
+    );
+  }
+
+  const batches: { text: string; index: number }[][] = [];
+  for (let i = 0; i < claims.length; i += DECISION_BATCH_SIZE) {
+    batches.push(
+      claims.slice(i, i + DECISION_BATCH_SIZE).map((claim, offset) => ({
+        text: claim.text,
+        index: i + offset,
+      })),
+    );
+  }
+
+  const scores = new Array<number>(claims.length).fill(0);
+  const client = createClient(credentials);
+
+  await mapPool(batches, 2, async (batch) => {
+    const decision = await client.decisions.create({
+      model: DECISIONS_MODEL,
+      input: [
+        {
+          role: "developer",
+          content: [
+            "Decide whether each claim deserves a paid web fact-check.",
+            "True only for concrete, independently verifiable factual assertions that could be false",
+            "(definition, mechanism, property, history, API behavior, numeric claim).",
+            "False for opinions, incomplete fragments, headings, rhetorical questions,",
+            "writing-quality commentary, missing-context complaints, chunking/retrieval pedagogy,",
+            "or anything not checkable as true/false against public sources.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "Evaluate each claim in the JSON evidence by id.",
+            },
+            {
+              type: "input_json",
+              data: {
+                claims: batch.map((item) => ({
+                  id: `claim_${item.index}`,
+                  text: item.text,
+                })),
+              },
+            },
+          ],
+        },
+      ],
+      questions: batch.map((item) => ({
+        type: "predicate" as const,
+        name: `claim_${item.index}`,
+        instructions: `Is claim id "claim_${item.index}" worth a paid web fact-check?`,
+      })),
+    });
+
+    for (const answer of decision.answers) {
+      if (answer.type !== "predicate" || !answer.name) continue;
+      const match = /^claim_(\d+)$/.exec(answer.name);
+      if (!match) continue;
+      const index = Number(match[1]);
+      if (Number.isNaN(index) || index < 0 || index >= claims.length) continue;
+      scores[index] = answer.probability;
+    }
+  });
+
+  return claims.map((claim, index) => ({
+    text: claim.text,
+    score: scores[index] ?? 0,
+  }));
 }
 
 export async function judgeClaim(
@@ -409,13 +508,15 @@ export async function judgeClaim(
       additionalProperties: false,
     },
     [
-      "Fact-check this claim using web search.",
-      "Search before answering whenever the claim depends on facts, definitions, or current knowledge.",
-      "Use correct only when reliable sources support it.",
-      "Use incorrect when reliable sources contradict it.",
-      "Use unsure when evidence is ambiguous or insufficient.",
-      "Explain briefly and include direct source URLs from the search results.",
-      "When possible, return JSON with keys verdict, reason, and sources.",
+      "Fact-check only the factual truth of this claim using web search.",
+      "Search before answering when the claim depends on facts, definitions, or established knowledge.",
+      "correct = reliable sources support the asserted fact.",
+      "incorrect = reliable sources contradict it. The reason MUST state the wrong part and the correct fact in one or two short sentences.",
+      "unsure = sources conflict or do not cover this specific factual assertion. Do not use unsure for writing quality.",
+      "Never critique missing context, clarity, completeness, chunking, retrieval quality, tone, or how well the claim explains something.",
+      "Never say the claim is incomplete or needs more explanation — that is not a fact-check.",
+      "If the text is not a factual assertion, return unsure with reason 'Not a checkable factual claim.' and empty sources.",
+      "Include direct source URLs only when they support the verdict.",
     ].join(" "),
     claim,
     true,

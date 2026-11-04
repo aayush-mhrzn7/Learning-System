@@ -11,7 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/providers";
+import {
+  isEnabledProviderId,
+  PROVIDER_DEFAULTS,
+  PROVIDER_IDS,
+  type ProviderId,
+} from "@/lib/providers";
 import { cn } from "@/lib/utils";
 
 type ProviderView = {
@@ -79,7 +84,7 @@ const providerMeta: Record<
   },
   openrouter: {
     name: "OpenRouter",
-    blurb: "Free models + web search tool",
+    blurb: "Temporarily disabled — ChatGPT only for now",
     iconSrc: "/icons/openrouter.svg",
     iconAlt: "OpenRouter",
     iconShell: "dark",
@@ -258,6 +263,10 @@ export function SettingsDialog({
   }, [selected, settings.providers]);
 
   async function saveProvider(options?: { makeActive?: boolean }) {
+    if (!isEnabledProviderId(selected)) {
+      toast.error("OpenRouter is disabled for now");
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch("/api/settings/providers", {
@@ -288,6 +297,10 @@ export function SettingsDialog({
   }
 
   async function enableOnly(id: ProviderId) {
+    if (!isEnabledProviderId(id)) {
+      toast.error("OpenRouter is disabled for now");
+      return;
+    }
     if (!settings.providers[id].apiKeyConfigured) {
       setSelected(id);
       toast.error("Save an API key for this provider first");
@@ -318,6 +331,7 @@ export function SettingsDialog({
   const provider = settings.providers[selected];
   const meta = providerMeta[selected];
   const selectedStatus = statuses[selected];
+  const selectedEnabled = isEnabledProviderId(selected);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -358,8 +372,9 @@ export function SettingsDialog({
                 Providers
               </p>
               <div className="flex flex-col gap-0.5">
-                {(Object.keys(providerMeta) as ProviderId[]).map((id) => {
+                {PROVIDER_IDS.map((id) => {
                   const item = providerMeta[id];
+                  const available = isEnabledProviderId(id);
                   const enabled = settings.activeProvider === id;
                   const status = statuses[id];
                   return (
@@ -368,6 +383,7 @@ export function SettingsDialog({
                       className={cn(
                         "flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors",
                         selected === id ? "bg-white/10" : "hover:bg-white/5",
+                        !available && "opacity-60",
                       )}
                     >
                       <button
@@ -382,13 +398,13 @@ export function SettingsDialog({
                           </span>
                           <span className="flex items-center gap-1.5 truncate text-[11px] text-zinc-500">
                             <StatusDot status={status} />
-                            {status.label}
+                            {available ? status.label : "Disabled"}
                           </span>
                         </span>
                       </button>
                       <Switch
                         checked={enabled}
-                        disabled={saving || loading}
+                        disabled={saving || loading || !available}
                         onCheckedChange={(checked) => {
                           if (checked) void enableOnly(id);
                         }}
@@ -418,13 +434,17 @@ export function SettingsDialog({
                     <Field
                       label="Status"
                       description={
-                        selectedStatus.detail ??
-                        "Live check against this provider’s API."
+                        selectedEnabled
+                          ? (selectedStatus.detail ??
+                            "Live check against this provider’s API.")
+                          : "OpenRouter is temporarily disabled. Use ChatGPT."
                       }
                     >
                       <div className="flex h-9 items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 text-xs text-zinc-200">
                         <StatusDot status={selectedStatus} />
-                        <span>{selectedStatus.label}</span>
+                        <span>
+                          {selectedEnabled ? selectedStatus.label : "Disabled"}
+                        </span>
                       </div>
                     </Field>
 
@@ -442,9 +462,11 @@ export function SettingsDialog({
                     <Field
                       label="API key"
                       description={
-                        provider.apiKeyConfigured
-                          ? "Encrypted in the database. Leave blank to keep the current key."
-                          : "Encrypted in the database. Never stored in the browser."
+                        selectedEnabled
+                          ? provider.apiKeyConfigured
+                            ? "Encrypted in the database. Leave blank to keep the current key."
+                            : "Encrypted in the database. Never stored in the browser."
+                          : "Saving is disabled while OpenRouter is off."
                       }
                     >
                       <Input
@@ -453,6 +475,7 @@ export function SettingsDialog({
                         spellCheck={false}
                         value={apiKeyDraft}
                         onChange={(event) => setApiKeyDraft(event.target.value)}
+                        disabled={!selectedEnabled}
                         placeholder={
                           provider.apiKeyConfigured
                             ? "•••••••• (unchanged)"
@@ -477,6 +500,7 @@ export function SettingsDialog({
                         onChange={(event) => setModelDraft(event.target.value)}
                         placeholder="model id"
                         spellCheck={false}
+                        disabled={!selectedEnabled}
                         className={fieldInputClass}
                       />
                     </Field>
@@ -490,6 +514,7 @@ export function SettingsDialog({
                         onChange={(event) => setBaseUrlDraft(event.target.value)}
                         placeholder="https://"
                         spellCheck={false}
+                        disabled={!selectedEnabled}
                         className={fieldInputClass}
                       />
                     </Field>
@@ -500,14 +525,15 @@ export function SettingsDialog({
                           Use as active provider
                         </p>
                         <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
-                          Turning this on disables the other provider
-                          automatically.
+                          {selectedEnabled
+                            ? "Turning this on disables the other provider automatically."
+                            : "Unavailable while OpenRouter is disabled."}
                         </p>
                       </div>
                       <Switch
                         size="md"
                         checked={settings.activeProvider === selected}
-                        disabled={saving || loading}
+                        disabled={saving || loading || !selectedEnabled}
                         onCheckedChange={(checked) => {
                           if (checked) void enableOnly(selected);
                         }}
@@ -518,7 +544,7 @@ export function SettingsDialog({
                       <Button
                         type="button"
                         size="sm"
-                        disabled={saving}
+                        disabled={saving || !selectedEnabled}
                         onClick={() =>
                           void saveProvider({
                             makeActive: settings.activeProvider === selected,

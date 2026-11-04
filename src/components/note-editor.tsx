@@ -11,11 +11,19 @@ import {
   CheckCircle2,
   LoaderCircle,
   PanelLeftOpen,
+  PanelRightOpen,
   Pencil,
   ScanSearch,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  ActivityPipeline,
+  createPipelineRun,
+  patchPipelineStep,
+  type PipelineKind,
+  type PipelineRun,
+} from "@/components/activity-pipeline";
 import {
   ClaimFlags,
   claimFlagsKey,
@@ -50,11 +58,11 @@ export function NoteEditor({
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
     "saved",
   );
-  const [checking, setChecking] = useState(false);
-  const [checkingProgress, setCheckingProgress] = useState("");
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [pipelineRun, setPipelineRun] = useState<PipelineRun | null>(null);
+  const [pipelineBusy, setPipelineBusy] = useState(false);
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
-  const [publishing, setPublishing] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [hovered, setHovered] = useState<{
     claim: ClaimFlag;
@@ -65,6 +73,8 @@ export function NoteEditor({
   const titleRef = useRef(title);
   const noteIdRef = useRef(noteId);
   const claimsRef = useRef<ClaimFlag[]>([]);
+  const pipelineStepRef = useRef("save");
+  const pipelineGenRef = useRef(0);
   // Block autosave until the note for noteId is loaded into the editor.
   // Otherwise an empty initial doc (or a stale prior note) can overwrite Neon.
   const loadingContent = useRef(true);
@@ -186,6 +196,10 @@ export function NoteEditor({
     hydratedNoteId.current = null;
     noteIdRef.current = noteId;
     setPayload(null);
+    pipelineGenRef.current += 1;
+    setPipelineOpen(false);
+    setPipelineRun(null);
+    setPipelineBusy(false);
     if (!editor) return;
     let cancelled = false;
 
@@ -225,28 +239,112 @@ export function NoteEditor({
     }
   }
 
-  async function factCheck() {
-    if (checking) return;
-    await saveNow();
-    setChecking(true);
-    setCheckingProgress("Extracting claims");
+  function clipLog(text: string, max = 120) {
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    if (cleaned.length <= max) return cleaned;
+    return `${cleaned.slice(0, max - 1)}…`;
+  }
+
+  function updateStep(
+    gen: number,
+    stepId: string,
+    patch: Parameters<typeof patchPipelineStep>[2],
+  ) {
+    if (gen !== pipelineGenRef.current) return;
+    if (patch.status === "running" || patch.status === "failed") {
+      pipelineStepRef.current = stepId;
+    }
+    setPipelineRun((current) =>
+      current ? patchPipelineStep(current, stepId, patch) : current,
+    );
+  }
+
+  function failPipeline(gen: number, stepId: string, message: string) {
+    if (gen !== pipelineGenRef.current) return;
+    setPipelineRun((current) => {
+      if (!current) return current;
+      return {
+        ...patchPipelineStep(current, stepId, {
+          status: "failed",
+          detail: message,
+        }),
+        status: "failed",
+      };
+    });
+  }
+
+  async function runPipeline(kind: PipelineKind) {
+    if (pipelineBusy) return;
+
+    const gen = pipelineGenRef.current + 1;
+    pipelineGenRef.current = gen;
+    const run = createPipelineRun(kind);
+    pipelineStepRef.current = "save";
+    setPipelineRun(run);
+    setPipelineOpen(true);
+    setPipelineBusy(true);
     applyClaims([]);
 
     try {
+      updateStep(gen, "save", {
+        status: "running",
+        log: "+ saving note",
+      });
+      await saveNow();
+      if (gen !== pipelineGenRef.current) return;
+      updateStep(gen, "save", {
+        status: "success",
+        log: "✓ note saved",
+      });
+
+      if (kind !== "fact-check") {
+        updateStep(gen, "publish", {
+          status: "running",
+          log: `+ ${kind === "re-publish" ? "re-publishing" : "publishing"} note`,
+        });
+        const response = await fetch(`/api/notes/${noteId}/publish`, {
+          method: "POST",
+        });
+        if (!response.ok) {
+          throw new Error(
+            kind === "re-publish" ? "Re-publish failed" : "Publish failed",
+          );
+        }
+        const { note } = (await response.json()) as { note: NoteDetail };
+        if (gen !== pipelineGenRef.current) return;
+        setPayload((current) => (current ? { ...current, note } : current));
+        updateStep(gen, "publish", {
+          status: "success",
+          log: "✓ status set to published",
+        });
+      }
+
+      updateStep(gen, "extract", {
+        status: "running",
+        detail: "Starting…",
+        log: "+ extractClaims",
+      });
       const response = await fetch(`/api/notes/${noteId}/fact-check`, {
         method: "POST",
       });
-      if (!response.ok || !response.body) throw new Error("Check failed");
+      if (!response.ok || !response.body) {
+        throw new Error("Fact-check failed");
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let completed = 0;
       let total = 0;
+      let skipped = 0;
+      let failedClaims = 0;
+      let extractedCount = 0;
+      let sawDone = false;
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (gen !== pipelineGenRef.current) return;
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
@@ -254,58 +352,204 @@ export function NoteEditor({
           if (!line) continue;
           const event = JSON.parse(line) as {
             type: string;
+            index?: number;
             total?: number;
+            skipped?: number;
+            text?: string;
+            claimText?: string;
+            score?: number;
+            check?: boolean;
             claim?: ClaimFlag;
             incomplete?: boolean;
             error?: string;
           };
+
           if (event.type === "extracting") {
-            setCheckingProgress("Extracting claims");
+            updateStep(gen, "extract", {
+              status: "running",
+              detail: "Reading note…",
+              log: "reading note text…",
+            });
           }
+
+          if (event.type === "extracted" && event.text) {
+            extractedCount = event.total ?? extractedCount;
+            updateStep(gen, "extract", {
+              status: "running",
+              detail: `${event.index}/${event.total} claims`,
+              log: `[${event.index}/${event.total}] ${clipLog(event.text)}`,
+            });
+          }
+
+          if (event.type === "scoring") {
+            updateStep(gen, "extract", {
+              status: "success",
+              detail:
+                typeof event.total === "number"
+                  ? `${event.total} claim${event.total === 1 ? "" : "s"}`
+                  : undefined,
+              log:
+                typeof event.total === "number"
+                  ? `✓ extracted ${event.total} claims`
+                  : "✓ extract done",
+            });
+            updateStep(gen, "score", {
+              status: "running",
+              detail:
+                typeof event.total === "number"
+                  ? `gpt-6-luna · ${event.total}`
+                  : "gpt-6-luna…",
+              log: "+ OpenAI Decisions gpt-6-luna (threshold > 0.8)",
+            });
+          }
+
+          if (event.type === "scored" && event.text && typeof event.score === "number") {
+            const scoreLabel = event.score.toFixed(2);
+            const gate = event.check ? "PASS" : "skip";
+            updateStep(gen, "score", {
+              status: "running",
+              detail: `${event.index}/${event.total} scored`,
+              log: `[${event.index}/${event.total}] ${scoreLabel} ${gate}  ${clipLog(event.text)}`,
+            });
+          }
+
           if (event.type === "start") {
             total = event.total ?? 0;
-            setCheckingProgress(`Checking 0 of ${total}`);
+            skipped = event.skipped ?? 0;
+            updateStep(gen, "score", {
+              status: "success",
+              detail:
+                skipped > 0
+                  ? `Skipped ${skipped} below 0.8`
+                  : "All claims passed threshold",
+              log: `✓ ${total} above 0.8 · ${skipped} skipped`,
+            });
+            if (total === 0) {
+              updateStep(gen, "web", {
+                status: "skipped",
+                detail: skipped > 0 ? "Nothing above 0.8" : "No claims",
+                log: "no web checks required",
+              });
+            } else {
+              updateStep(gen, "web", {
+                status: "running",
+                detail: `0 of ${total}`,
+                log: `+ judgeClaim × ${total}`,
+              });
+            }
           }
+
+          if (event.type === "checking" && event.text) {
+            const scoreLabel =
+              typeof event.score === "number"
+                ? event.score.toFixed(2)
+                : "?";
+            updateStep(gen, "web", {
+              status: "running",
+              log: `→ searching  (${scoreLabel})  ${clipLog(event.text)}`,
+            });
+          }
+
           if (event.type === "claim" && event.claim) {
             completed += 1;
             applyClaims([...claimsRef.current, event.claim]);
-            setCheckingProgress(`Checked ${completed} of ${total}`);
+            updateStep(gen, "web", {
+              status: "running",
+              detail: `${completed} of ${total}`,
+              log: `✓ ${event.claim.verdict}  ${clipLog(event.claim.claimText)}`,
+            });
           }
+
           if (event.type === "claim_error") {
             completed += 1;
-            setCheckingProgress(`Checked ${completed} of ${total}`);
+            failedClaims += 1;
+            updateStep(gen, "web", {
+              status: "running",
+              detail: `${completed} of ${total} · ${failedClaims} failed`,
+              log: `✗ ${event.error ?? "failed"}  ${clipLog(event.claimText ?? "")}`,
+            });
           }
+
           if (event.type === "done") {
+            sawDone = true;
+            const incomplete = Boolean(event.incomplete);
             setPayload((current) =>
               current
                 ? {
                     ...current,
                     note: {
                       ...current.note,
-                      factCheckIncomplete: Boolean(event.incomplete),
+                      factCheckIncomplete: incomplete,
                     },
                   }
                 : current,
             );
+            if (total > 0) {
+              updateStep(gen, "web", {
+                status: incomplete ? "failed" : "success",
+                detail: incomplete
+                  ? `${failedClaims} claim${failedClaims === 1 ? "" : "s"} failed`
+                  : `${total} checked`,
+                log: incomplete
+                  ? `✗ web check incomplete (${failedClaims} failed)`
+                  : `✓ web check complete (${total})`,
+              });
+            }
+            if (incomplete) {
+              updateStep(gen, "complete", {
+                status: "failed",
+                detail: "Fact-check incomplete",
+                log: "pipeline failed",
+              });
+              if (gen === pipelineGenRef.current) {
+                setPipelineRun((current) =>
+                  current ? { ...current, status: "failed" } : current,
+                );
+              }
+            } else {
+              updateStep(gen, "complete", {
+                status: "success",
+                log:
+                  extractedCount > 0
+                    ? `✓ done · ${total} web · ${skipped} skipped`
+                    : "✓ done",
+              });
+              if (gen === pipelineGenRef.current) {
+                setPipelineRun((current) =>
+                  current ? { ...current, status: "success" } : current,
+                );
+              }
+            }
           }
-          if (event.type === "error") throw new Error(event.error);
+
+          if (event.type === "error") {
+            throw new Error(event.error ?? "Fact-check failed");
+          }
         }
       }
+
+      if (!sawDone) {
+        throw new Error("Fact-check ended early");
+      }
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Fact-check failed",
-      );
-      setPayload((current) =>
-        current
-          ? {
-              ...current,
-              note: { ...current.note, factCheckIncomplete: true },
-            }
-          : current,
-      );
+      if (gen !== pipelineGenRef.current) return;
+      const message =
+        error instanceof Error ? error.message : "Pipeline failed";
+      const stepId = pipelineStepRef.current || "complete";
+      failPipeline(gen, stepId, message);
+      toast.error(message);
+      if (stepId !== "publish" && stepId !== "save") {
+        setPayload((current) =>
+          current
+            ? {
+                ...current,
+                note: { ...current.note, factCheckIncomplete: true },
+              }
+            : current,
+        );
+      }
     } finally {
-      setChecking(false);
-      setCheckingProgress("");
+      if (gen === pipelineGenRef.current) setPipelineBusy(false);
     }
   }
 
@@ -342,23 +586,6 @@ export function NoteEditor({
     }
   }
 
-  async function publish() {
-    if (publishing || checking) return;
-    setPublishing(true);
-    try {
-      await saveNow();
-      const response = await fetch(`/api/notes/${noteId}/publish`, {
-        method: "POST",
-      });
-      if (!response.ok) return;
-      const { note } = (await response.json()) as { note: NoteDetail };
-      setPayload((current) => (current ? { ...current, note } : current));
-      void factCheck();
-    } finally {
-      setPublishing(false);
-    }
-  }
-
   async function toggleChecklist(item: ChecklistItem) {
     const ticked = !item.ticked;
     setPayload((current) =>
@@ -390,245 +617,274 @@ export function NoteEditor({
     skipCode: true,
   }).length;
 
+  const publishKind: PipelineKind =
+    payload.note.status === "published" ? "re-publish" : "publish";
+
   return (
-    <main className="relative flex h-screen min-w-0 flex-1 flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
-        {sidebarCollapsed ? (
-          <button
-            className="icon-button"
-            onClick={onOpenSidebar}
-            aria-label="Open sidebar"
-          >
-            <PanelLeftOpen size={16} />
-          </button>
-        ) : null}
-        <span className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
-          {payload.note.status}
-        </span>
-        {payload.note.editedSincePublish ? (
-          <span className="text-[9px] text-amber-300/80">
-            Edited since publish
-          </span>
-        ) : null}
-        {payload.note.factCheckIncomplete ? (
-          <button
-            onClick={() => void factCheck()}
-            className="flex items-center gap-1 text-[9px] text-amber-300/80"
-          >
-            <AlertCircle size={12} />
-            Fact-check incomplete · Retry
-          </button>
-        ) : null}
-        <span className="ml-auto text-[9px] text-[#666]">
-          {saveState === "saving"
-            ? "Saving…"
-            : saveState === "error"
-              ? "Save failed"
-              : "Saved"}
-        </span>
-        <button
-          onClick={() => {
-            if (!readOnly) void saveNow();
-            setReadOnly((current) => !current);
-          }}
-          className="topbar-button"
-          aria-pressed={readOnly}
-        >
-          {readOnly ? <Pencil size={13} /> : <BookOpen size={13} />}
-          {readOnly ? "Edit" : "Read-only"}
-        </button>
-        <button
-          onClick={() => void factCheck()}
-          disabled={checking}
-          className="topbar-button"
-        >
-          {checking ? (
-            <LoaderCircle size={13} className="animate-spin" />
-          ) : (
-            <ScanSearch size={13} />
-          )}
-          {checking ? checkingProgress : "Fact-check"}
-        </button>
-        <button
-          onClick={() => void publish()}
-          disabled={publishing || checking}
-          className="topbar-button solid"
-        >
-          {publishing ? (
-            <LoaderCircle size={13} className="animate-spin" />
+    <div className="flex min-w-0 flex-1">
+      <main className="relative flex h-screen min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+          {sidebarCollapsed ? (
+            <button
+              className="icon-button"
+              onClick={onOpenSidebar}
+              aria-label="Open sidebar"
+            >
+              <PanelLeftOpen size={16} />
+            </button>
           ) : null}
-          {publishing
-            ? "Publishing…"
-            : payload.note.status === "published"
-              ? "Re-publish"
-              : "Publish"}
-        </button>
-      </header>
-      {readOnly ? null : <FormattingToolbar editor={editor} />}
-
-      <div
-        className="flex-1 overflow-y-auto"
-        onScroll={() => {
-          if (hovered) setHovered(null);
-        }}
-      >
-        <article className="w-full px-8 pb-32 pt-10 sm:px-14 lg:px-20">
-          <input
-            value={title}
-            readOnly={readOnly}
-            onChange={(event) => {
-              const next = event.target.value;
-              setTitle(next);
-              titleRef.current = next;
-              onTitleChange(noteId, next.trim() || "Untitled");
-              scheduleSave();
+          <span className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+            {payload.note.status}
+          </span>
+          {payload.note.editedSincePublish ? (
+            <span className="text-[9px] text-amber-300/80">
+              Edited since publish
+            </span>
+          ) : null}
+          {payload.note.factCheckIncomplete ? (
+            <button
+              onClick={() => void runPipeline("fact-check")}
+              disabled={pipelineBusy}
+              className="flex items-center gap-1 text-[9px] text-amber-300/80"
+            >
+              <AlertCircle size={12} />
+              Fact-check incomplete · Retry
+            </button>
+          ) : null}
+          <span className="ml-auto text-[9px] text-[#666]">
+            {saveState === "saving"
+              ? "Saving…"
+              : saveState === "error"
+                ? "Save failed"
+                : "Saved"}
+          </span>
+          <button
+            onClick={() => {
+              if (!readOnly) void saveNow();
+              setReadOnly((current) => !current);
             }}
-            onBlur={() => {
-              if (!title.trim()) {
-                setTitle("Untitled");
-                titleRef.current = "Untitled";
-                onTitleChange(noteId, "Untitled");
-                scheduleSave();
-              }
-            }}
-            className={`mb-3 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444] ${
-              readOnly ? "cursor-default caret-transparent" : ""
-            }`}
-            placeholder="Untitled"
-            aria-label="Note title"
-          />
-
-          <div
-            onMouseOver={(event) => {
-              if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
-              const target = (event.target as HTMLElement).closest<HTMLElement>(
-                "[data-claim-id]",
-              );
-              const claim = claimsRef.current.find(
-                (item) => item.id === target?.dataset.claimId,
-              );
-              if (claim && target) {
-                const rect = target.getBoundingClientRect();
-                setHovered({
-                  claim,
-                  x: Math.min(rect.left, window.innerWidth - 360),
-                  y: rect.bottom + 8,
-                });
-              }
-            }}
-            onMouseLeave={() => {
-              hoverTimer.current = window.setTimeout(
-                () => setHovered(null),
-                180,
-              );
-            }}
+            className="topbar-button"
+            aria-pressed={readOnly}
           >
-            <EditorContent editor={editor} />
-          </div>
+            {readOnly ? <Pencil size={13} /> : <BookOpen size={13} />}
+            {readOnly ? "Edit" : "Read-only"}
+          </button>
+          <button
+            onClick={() => void runPipeline("fact-check")}
+            disabled={pipelineBusy}
+            className="topbar-button"
+          >
+            {pipelineBusy && pipelineRun?.kind === "fact-check" ? (
+              <LoaderCircle size={13} className="animate-spin" />
+            ) : (
+              <ScanSearch size={13} />
+            )}
+            Fact-check
+          </button>
+          <button
+            onClick={() => void runPipeline(publishKind)}
+            disabled={pipelineBusy}
+            className="topbar-button solid"
+          >
+            {pipelineBusy && pipelineRun?.kind !== "fact-check" ? (
+              <LoaderCircle size={13} className="animate-spin" />
+            ) : null}
+            {payload.note.status === "published" ? "Re-publish" : "Publish"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPipelineOpen((open) => !open)}
+            className="icon-button relative"
+            aria-label={pipelineOpen ? "Close activity" : "Open activity"}
+            aria-pressed={pipelineOpen}
+          >
+            <PanelRightOpen size={16} />
+            {pipelineBusy ? (
+              <span className="absolute right-1 top-1 size-1.5 rounded-full bg-foreground" />
+            ) : null}
+          </button>
+        </header>
+        {readOnly ? null : <FormattingToolbar editor={editor} />}
 
-          {payload.note.status === "published" ? (
-            <section className="mt-20 border-t border-border pt-8">
-              <div className="mb-5 flex items-center gap-3">
-                <h2 className="text-sm font-medium">What’s missing</h2>
-                {gapsLoading ? (
-                  <LoaderCircle size={13} className="animate-spin text-muted-foreground" />
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="ml-auto"
-                  disabled={gapsLoading || analysisLength < 500}
-                  onClick={() => void findGaps()}
-                >
-                  {payload.checklist.length ? "Analyze again" : "Analyze gaps"}
-                </Button>
-              </div>
-              {analysisLength < 500 ? (
-                <p className="text-xs text-muted-foreground">
-                  Write {500 - analysisLength} more non-code characters to
-                  unlock gap analysis.
-                </p>
-              ) : null}
-              {analysisLength >= 500 &&
-              !gapsLoading &&
-              payload.checklist.length === 0 ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 size={15} />
-                  {gapsMessage ||
-                    "Analyze this learning note when you’re ready."}
-                </p>
-              ) : null}
-              {gapsMessage && payload.checklist.length > 0 ? (
-                <p className="mb-4 text-xs text-muted-foreground">{gapsMessage}</p>
-              ) : null}
-              <div className="space-y-3">
-                {payload.checklist.map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex cursor-pointer items-start gap-3 text-sm leading-6"
+        <div
+          className="flex-1 overflow-y-auto"
+          onScroll={() => {
+            if (hovered) setHovered(null);
+          }}
+        >
+          <article className="w-full px-8 pb-32 pt-10 sm:px-14 lg:px-20">
+            <input
+              value={title}
+              readOnly={readOnly}
+              onChange={(event) => {
+                const next = event.target.value;
+                setTitle(next);
+                titleRef.current = next;
+                onTitleChange(noteId, next.trim() || "Untitled");
+                scheduleSave();
+              }}
+              onBlur={() => {
+                if (!title.trim()) {
+                  setTitle("Untitled");
+                  titleRef.current = "Untitled";
+                  onTitleChange(noteId, "Untitled");
+                  scheduleSave();
+                }
+              }}
+              className={`mb-3 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444] ${
+                readOnly ? "cursor-default caret-transparent" : ""
+              }`}
+              placeholder="Untitled"
+              aria-label="Note title"
+            />
+
+            <div
+              onMouseOver={(event) => {
+                if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+                const target = (
+                  event.target as HTMLElement
+                ).closest<HTMLElement>("[data-claim-id]");
+                const claim = claimsRef.current.find(
+                  (item) => item.id === target?.dataset.claimId,
+                );
+                if (claim && target) {
+                  const rect = target.getBoundingClientRect();
+                  setHovered({
+                    claim,
+                    x: Math.min(rect.left, window.innerWidth - 360),
+                    y: rect.bottom + 8,
+                  });
+                }
+              }}
+              onMouseLeave={() => {
+                hoverTimer.current = window.setTimeout(
+                  () => setHovered(null),
+                  180,
+                );
+              }}
+            >
+              <EditorContent editor={editor} />
+            </div>
+
+            {payload.note.status === "published" ? (
+              <section className="mt-20 border-t border-border pt-8">
+                <div className="mb-5 flex items-center gap-3">
+                  <h2 className="text-sm font-medium">What’s missing</h2>
+                  {gapsLoading ? (
+                    <LoaderCircle
+                      size={13}
+                      className="animate-spin text-muted-foreground"
+                    />
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    disabled={gapsLoading || analysisLength < 500}
+                    onClick={() => void findGaps()}
                   >
-                    <button
-                      type="button"
-                      onClick={() => void toggleChecklist(item)}
-                      className={`mt-1 grid h-4 w-4 shrink-0 place-items-center border ${
-                        item.ticked
-                          ? "border-foreground bg-foreground text-background"
-                          : "border-[#555]"
-                      }`}
-                      aria-label={item.ticked ? "Mark incomplete" : "Complete"}
+                    {payload.checklist.length
+                      ? "Analyze again"
+                      : "Analyze gaps"}
+                  </Button>
+                </div>
+                {analysisLength < 500 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Write {500 - analysisLength} more non-code characters to
+                    unlock gap analysis.
+                  </p>
+                ) : null}
+                {analysisLength >= 500 &&
+                !gapsLoading &&
+                payload.checklist.length === 0 ? (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <CheckCircle2 size={15} />
+                    {gapsMessage ||
+                      "Analyze this learning note when you’re ready."}
+                  </p>
+                ) : null}
+                {gapsMessage && payload.checklist.length > 0 ? (
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    {gapsMessage}
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-3">
+                  {payload.checklist.map((item) => (
+                    <label
+                      key={item.id}
+                      className="flex cursor-pointer items-start gap-3 text-sm leading-6"
                     >
-                      {item.ticked ? <Check size={11} /> : null}
-                    </button>
-                    <span
-                      className={
-                        item.ticked ? "text-muted-foreground line-through" : undefined
-                      }
-                    >
-                      {item.text}
-                    </span>
-                  </label>
+                      <button
+                        type="button"
+                        onClick={() => void toggleChecklist(item)}
+                        className={`mt-1 grid h-4 w-4 shrink-0 place-items-center border ${
+                          item.ticked
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-[#555]"
+                        }`}
+                        aria-label={
+                          item.ticked ? "Mark incomplete" : "Complete"
+                        }
+                      >
+                        {item.ticked ? <Check size={11} /> : null}
+                      </button>
+                      <span
+                        className={
+                          item.ticked
+                            ? "text-muted-foreground line-through"
+                            : undefined
+                        }
+                      >
+                        {item.text}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </article>
+        </div>
+
+        {hovered ? (
+          <aside
+            className="fixed z-50 w-80 border border-[#333] bg-[#111] p-4 shadow-2xl"
+            style={{ left: hovered.x, top: hovered.y }}
+            onMouseEnter={() => {
+              if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+            }}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              {hovered.claim.stale ? "Stale result" : hovered.claim.verdict}
+            </p>
+            <p className="text-xs leading-5 text-[#ddd]">
+              {hovered.claim.reason}
+            </p>
+            {hovered.claim.sources.length ? (
+              <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
+                {hovered.claim.sources.map((source) => (
+                  <a
+                    key={source.url}
+                    href={source.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block truncate text-[11px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                  >
+                    {source.title}
+                  </a>
                 ))}
               </div>
-            </section>
-          ) : null}
-        </article>
-      </div>
+            ) : null}
+          </aside>
+        ) : null}
+      </main>
 
-      {hovered ? (
-        <aside
-          className="fixed z-50 w-80 border border-[#333] bg-[#111] p-4 shadow-2xl"
-          style={{ left: hovered.x, top: hovered.y }}
-          onMouseEnter={() => {
-            if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
-          }}
-          onMouseLeave={() => setHovered(null)}
-        >
-          <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            {hovered.claim.stale
-              ? "Stale result"
-              : hovered.claim.verdict}
-          </p>
-          <p className="text-xs leading-5 text-[#ddd]">
-            {hovered.claim.reason}
-          </p>
-          {hovered.claim.sources.length ? (
-            <div className="mt-3 space-y-1.5 border-t border-border pt-3">
-              {hovered.claim.sources.map((source) => (
-                <a
-                  key={source.url}
-                  href={source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block truncate text-[11px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
-                >
-                  {source.title}
-                </a>
-              ))}
-            </div>
-          ) : null}
-        </aside>
-      ) : null}
-    </main>
+      <ActivityPipeline
+        open={pipelineOpen}
+        run={pipelineRun}
+        onClose={() => setPipelineOpen(false)}
+      />
+    </div>
   );
 }

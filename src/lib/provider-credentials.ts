@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { providerCredentials } from "@/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/credentials-crypto";
 import {
+  ENABLED_PROVIDER_IDS,
+  isEnabledProviderId,
   PROVIDER_DEFAULTS,
   type ProviderId,
   type ResolvedProviderCredentials,
@@ -48,22 +50,26 @@ export async function getProviderSettingsView(
     >
   >;
 
-  const active =
+  const storedActive =
     rows.find((row) => row.isActive)?.provider ??
     (rows[0]?.provider as ProviderId | undefined) ??
     "gpt";
+  // OpenRouter disabled — surface ChatGPT as the active provider in settings.
+  const active: ProviderId = isEnabledProviderId(storedActive)
+    ? storedActive
+    : "gpt";
 
   return {
     activeProvider: active,
     providers: {
       gpt: {
-        enabled: active === "gpt",
+        enabled: true,
         model: byProvider.gpt?.model ?? PROVIDER_DEFAULTS.gpt.model,
         baseUrl: byProvider.gpt?.baseUrl ?? PROVIDER_DEFAULTS.gpt.baseUrl,
         apiKeyConfigured: Boolean(byProvider.gpt),
       },
       openrouter: {
-        enabled: active === "openrouter",
+        enabled: false,
         model:
           byProvider.openrouter?.model ?? PROVIDER_DEFAULTS.openrouter.model,
         baseUrl:
@@ -83,6 +89,10 @@ export async function upsertProviderCredential(input: {
   apiKey?: string;
   makeActive?: boolean;
 }) {
+  if (!isEnabledProviderId(input.provider)) {
+    throw new Error("OpenRouter is disabled. Use ChatGPT for now.");
+  }
+
   const existing = await db
     .select({
       id: providerCredentials.id,
@@ -146,6 +156,10 @@ export async function upsertProviderCredential(input: {
 }
 
 export async function setActiveProvider(userId: string, provider: ProviderId) {
+  if (!isEnabledProviderId(provider)) {
+    throw new Error("OpenRouter is disabled. Use ChatGPT for now.");
+  }
+
   const [row] = await db
     .select({ id: providerCredentials.id })
     .from(providerCredentials)
@@ -174,35 +188,26 @@ export async function setActiveProvider(userId: string, provider: ProviderId) {
 export async function resolveActiveProviderCredentials(
   userId: string,
 ): Promise<ResolvedProviderCredentials> {
-  const [active] = await db
+  // OpenRouter disabled — always resolve ChatGPT credentials.
+  const [row] = await db
     .select()
     .from(providerCredentials)
     .where(
       and(
         eq(providerCredentials.userId, userId),
-        eq(providerCredentials.isActive, true),
+        eq(providerCredentials.provider, "gpt"),
       ),
     )
     .limit(1);
 
-  const row =
-    active ??
-    (
-      await db
-        .select()
-        .from(providerCredentials)
-        .where(eq(providerCredentials.userId, userId))
-        .limit(1)
-    )[0];
-
   if (!row) {
     throw new Error(
-      "No AI provider configured. Add an API key in Settings → Providers.",
+      "ChatGPT is not configured. Add an OpenAI API key in Settings → Providers.",
     );
   }
 
   return {
-    provider: row.provider,
+    provider: "gpt",
     apiKey: decryptSecret(row.apiKeyCiphertext),
     model: row.model,
     baseUrl: row.baseUrl.replace(/\/$/, ""),
@@ -299,7 +304,7 @@ export async function getProviderConnectionStatuses(
   ) as Partial<Record<ProviderId, (typeof rows)[number]>>;
 
   const entries = await Promise.all(
-    (["gpt", "openrouter"] as ProviderId[]).map(async (provider) => {
+    ([...ENABLED_PROVIDER_IDS] as ProviderId[]).map(async (provider) => {
       const configured = view.providers[provider].apiKeyConfigured;
       const active = view.activeProvider === provider;
       if (!configured || !byProvider[provider]) {
@@ -348,8 +353,19 @@ export async function getProviderConnectionStatuses(
     }),
   );
 
-  return Object.fromEntries(entries) as Record<
+  const enabled = Object.fromEntries(entries) as Record<
     ProviderId,
     ProviderConnectionStatus
   >;
+
+  return {
+    gpt: enabled.gpt!,
+    openrouter: {
+      configured: false,
+      active: false,
+      ok: null,
+      label: "Disabled",
+      detail: "OpenRouter is disabled for now",
+    },
+  };
 }

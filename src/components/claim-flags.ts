@@ -41,7 +41,8 @@ function locateClaims(
   });
 
   for (const claim of claims) {
-    if (claim.verdict === "correct") continue;
+    // Only flag factual errors. "unsure" is noise for the reader.
+    if (claim.verdict !== "incorrect") continue;
     let offset = text.indexOf(claim.claimText);
     while (offset !== -1) {
       const from = positions[offset];
