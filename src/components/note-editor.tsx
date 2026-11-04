@@ -63,7 +63,8 @@ export function NoteEditor({
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
-  const [readOnly, setReadOnly] = useState(false);
+  // Default reading mode (mobile-first); desktop flips to edit after mount.
+  const [readOnly, setReadOnly] = useState(true);
   const [hovered, setHovered] = useState<{
     claim: ClaimFlag;
     x: number;
@@ -127,6 +128,12 @@ export function NoteEditor({
       if (!loadingContent.current) scheduleSave();
     },
   });
+
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      setReadOnly(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!editor) return;
@@ -607,7 +614,7 @@ export function NoteEditor({
 
   if (!payload || !editor) {
     return (
-      <div className="grid h-screen flex-1 place-items-center text-xs text-muted-foreground">
+      <div className="grid h-dvh flex-1 place-items-center text-xs text-muted-foreground md:h-screen">
         Loading note…
       </div>
     );
@@ -622,87 +629,106 @@ export function NoteEditor({
 
   return (
     <div className="flex min-w-0 flex-1">
-      <main className="relative flex h-screen min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
-          {sidebarCollapsed ? (
-            <button
-              className="icon-button"
-              onClick={onOpenSidebar}
-              aria-label="Open sidebar"
-            >
-              <PanelLeftOpen size={16} />
-            </button>
-          ) : null}
-          <span className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
-            {payload.note.status}
-          </span>
-          {payload.note.editedSincePublish ? (
-            <span className="text-[9px] text-amber-300/80">
-              Edited since publish
+      <main className="relative flex h-dvh min-w-0 flex-1 flex-col md:h-screen">
+        <header className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2 sm:h-14 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
+          <div className="flex min-w-0 items-center gap-2">
+            {sidebarCollapsed ? (
+              <button
+                className="icon-button shrink-0"
+                onClick={onOpenSidebar}
+                aria-label="Open sidebar"
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            ) : null}
+            <span className="truncate text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+              {payload.note.status}
             </span>
-          ) : null}
-          {payload.note.factCheckIncomplete ? (
+            {payload.note.editedSincePublish ? (
+              <span className="hidden truncate text-[9px] text-amber-300/80 sm:inline">
+                Edited since publish
+              </span>
+            ) : null}
+            {payload.note.factCheckIncomplete ? (
+              <button
+                onClick={() => void runPipeline("fact-check")}
+                disabled={pipelineBusy}
+                className="flex min-w-0 items-center gap-1 truncate text-[9px] text-amber-300/80"
+              >
+                <AlertCircle size={12} className="shrink-0" />
+                <span className="truncate">Retry fact-check</span>
+              </button>
+            ) : null}
+            <span className="ml-auto shrink-0 text-[9px] text-[#666] sm:hidden">
+              {saveState === "saving"
+                ? "Saving…"
+                : saveState === "error"
+                  ? "Failed"
+                  : "Saved"}
+            </span>
+          </div>
+
+          <div className="ml-auto flex items-center justify-end gap-1.5 overflow-x-auto sm:gap-2">
+            <span className="mr-1 hidden shrink-0 text-[9px] text-[#666] sm:inline">
+              {saveState === "saving"
+                ? "Saving…"
+                : saveState === "error"
+                  ? "Save failed"
+                  : "Saved"}
+            </span>
+            <button
+              onClick={() => {
+                if (!readOnly) void saveNow();
+                setReadOnly((current) => !current);
+              }}
+              className="topbar-button"
+              aria-pressed={readOnly}
+              aria-label={readOnly ? "Edit" : "Read-only"}
+            >
+              {readOnly ? <Pencil size={13} /> : <BookOpen size={13} />}
+              <span className="topbar-label">{readOnly ? "Edit" : "Read-only"}</span>
+            </button>
             <button
               onClick={() => void runPipeline("fact-check")}
               disabled={pipelineBusy}
-              className="flex items-center gap-1 text-[9px] text-amber-300/80"
+              className="topbar-button"
+              aria-label="Fact-check"
             >
-              <AlertCircle size={12} />
-              Fact-check incomplete · Retry
+              {pipelineBusy && pipelineRun?.kind === "fact-check" ? (
+                <LoaderCircle size={13} className="animate-spin" />
+              ) : (
+                <ScanSearch size={13} />
+              )}
+              <span className="topbar-label">Fact-check</span>
             </button>
-          ) : null}
-          <span className="ml-auto text-[9px] text-[#666]">
-            {saveState === "saving"
-              ? "Saving…"
-              : saveState === "error"
-                ? "Save failed"
-                : "Saved"}
-          </span>
-          <button
-            onClick={() => {
-              if (!readOnly) void saveNow();
-              setReadOnly((current) => !current);
-            }}
-            className="topbar-button"
-            aria-pressed={readOnly}
-          >
-            {readOnly ? <Pencil size={13} /> : <BookOpen size={13} />}
-            {readOnly ? "Edit" : "Read-only"}
-          </button>
-          <button
-            onClick={() => void runPipeline("fact-check")}
-            disabled={pipelineBusy}
-            className="topbar-button"
-          >
-            {pipelineBusy && pipelineRun?.kind === "fact-check" ? (
-              <LoaderCircle size={13} className="animate-spin" />
-            ) : (
-              <ScanSearch size={13} />
-            )}
-            Fact-check
-          </button>
-          <button
-            onClick={() => void runPipeline(publishKind)}
-            disabled={pipelineBusy}
-            className="topbar-button solid"
-          >
-            {pipelineBusy && pipelineRun?.kind !== "fact-check" ? (
-              <LoaderCircle size={13} className="animate-spin" />
-            ) : null}
-            {payload.note.status === "published" ? "Re-publish" : "Publish"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPipelineOpen((open) => !open)}
-            className="icon-button relative"
-            aria-label={pipelineOpen ? "Close activity" : "Open activity"}
-            aria-pressed={pipelineOpen}
-          >
-            <PanelRightOpen size={16} />
-            {pipelineBusy ? (
-              <span className="absolute right-1 top-1 size-1.5 rounded-full bg-foreground" />
-            ) : null}
-          </button>
+            <button
+              onClick={() => void runPipeline(publishKind)}
+              disabled={pipelineBusy}
+              className="topbar-button solid"
+              aria-label={
+                payload.note.status === "published" ? "Re-publish" : "Publish"
+              }
+            >
+              {pipelineBusy && pipelineRun?.kind !== "fact-check" ? (
+                <LoaderCircle size={13} className="animate-spin" />
+              ) : null}
+              <span>
+                {payload.note.status === "published" ? "Re-publish" : "Publish"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPipelineOpen((open) => !open)}
+              className="icon-button relative shrink-0"
+              aria-label={pipelineOpen ? "Close activity" : "Open activity"}
+              aria-pressed={pipelineOpen}
+            >
+              <PanelRightOpen size={16} />
+              {pipelineBusy ? (
+                <span className="absolute right-1 top-1 size-1.5 rounded-full bg-foreground" />
+              ) : null}
+            </button>
+          </div>
         </header>
         {readOnly ? null : <FormattingToolbar editor={editor} />}
 
@@ -712,7 +738,7 @@ export function NoteEditor({
             if (hovered) setHovered(null);
           }}
         >
-          <article className="w-full px-8 pb-32 pt-10 sm:px-14 lg:px-20">
+          <article className="w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20">
             <input
               value={title}
               readOnly={readOnly}
@@ -731,7 +757,7 @@ export function NoteEditor({
                   scheduleSave();
                 }
               }}
-              className={`mb-3 w-full bg-transparent text-4xl font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444] ${
+              className={`mb-3 w-full bg-transparent text-[1.75rem] font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444] sm:text-4xl ${
                 readOnly ? "cursor-default caret-transparent" : ""
               }`}
               placeholder="Untitled"
@@ -848,7 +874,7 @@ export function NoteEditor({
 
         {hovered ? (
           <aside
-            className="fixed z-50 w-80 border border-[#333] bg-[#111] p-4 shadow-2xl"
+            className="fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] border border-[#333] bg-[#111] p-4 shadow-2xl"
             style={{ left: hovered.x, top: hovered.y }}
             onMouseEnter={() => {
               if (hoverTimer.current) window.clearTimeout(hoverTimer.current);

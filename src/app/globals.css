@@ -119,13 +119,21 @@ button:disabled {
 
 .icon-button {
   display: grid;
-  height: 2rem;
-  width: 2rem;
+  height: 2.25rem;
+  width: 2.25rem;
+  flex-shrink: 0;
   place-items: center;
   color: #888;
   transition:
     color 150ms ease,
     background 150ms ease;
+}
+
+@media (min-width: 640px) {
+  .icon-button {
+    height: 2rem;
+    width: 2rem;
+  }
 }
 
 .icon-button:hover {
@@ -135,7 +143,7 @@ button:disabled {
 
 .sidebar-row {
   display: flex;
-  min-height: 2rem;
+  min-height: 2.25rem;
   align-items: center;
   gap: 0.5rem;
   padding: 0.35rem 0.5rem;
@@ -147,18 +155,42 @@ button:disabled {
     background 150ms ease;
 }
 
+@media (min-width: 640px) {
+  .sidebar-row {
+    min-height: 2rem;
+  }
+}
+
 .topbar-button {
   display: inline-flex;
-  height: 2rem;
+  height: 2.25rem;
   align-items: center;
   gap: 0.4rem;
   border: 1px solid var(--border);
-  padding: 0 1rem;
+  padding: 0 0.7rem;
   color: #c7c7c7;
   font-size: 0.625rem;
+  white-space: nowrap;
   transition:
     border-color 150ms ease,
     opacity 150ms ease;
+}
+
+@media (min-width: 640px) {
+  .topbar-button {
+    height: 2rem;
+    padding: 0 1rem;
+  }
+}
+
+.topbar-label {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .topbar-label {
+    display: inline;
+  }
 }
 
 .topbar-button:hover {
@@ -180,7 +212,13 @@ button:disabled {
   outline: none;
   color: #e7e7e7;
   font-size: 1rem;
-  line-height: 1.8;
+  line-height: 1.7;
+}
+
+@media (min-width: 640px) {
+  .learning-editor {
+    line-height: 1.8;
+  }
 }
 
 .learning-editor > * + * {

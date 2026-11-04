@@ -69,6 +69,7 @@ type SidebarProps = {
   onCollapse: () => void;
   onSearch: () => void;
   onSettings: () => void;
+  mobile?: boolean;
 };
 
 type EditAction =
@@ -526,34 +527,36 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      className="relative flex h-screen shrink-0 flex-col border-r border-border bg-[#080808]"
-      style={{ width }}
+      className="relative flex h-dvh w-full shrink-0 flex-col border-r border-border bg-[#080808] md:h-screen"
+      style={props.mobile ? undefined : { width }}
     >
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        aria-valuemin={SIDEBAR_MIN_WIDTH}
-        aria-valuemax={SIDEBAR_MAX_WIDTH}
-        aria-valuenow={width}
-        tabIndex={0}
-        onPointerDown={onResizePointerDown}
-        onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-          event.preventDefault();
-          setWidth((current) => {
-            const delta = event.key === "ArrowRight" ? 16 : -16;
-            const next = Math.min(
-              SIDEBAR_MAX_WIDTH,
-              Math.max(SIDEBAR_MIN_WIDTH, current + delta),
-            );
-            localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
-            return next;
-          });
-        }}
-        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-white/10 active:bg-white/20"
-      />
-      <div className="flex h-14 items-center justify-between border-b border-border px-4">
+      {props.mobile ? null : (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuenow={width}
+          tabIndex={0}
+          onPointerDown={onResizePointerDown}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            setWidth((current) => {
+              const delta = event.key === "ArrowRight" ? 16 : -16;
+              const next = Math.min(
+                SIDEBAR_MAX_WIDTH,
+                Math.max(SIDEBAR_MIN_WIDTH, current + delta),
+              );
+              localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+              return next;
+            });
+          }}
+          className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-white/10 active:bg-white/20"
+        />
+      )}
+      <div className="flex h-14 items-center justify-between border-b border-border px-3 sm:px-4">
         <span className="text-xs font-medium uppercase tracking-[0.2em]">
           Learning
         </span>
@@ -568,11 +571,11 @@ export function Sidebar(props: SidebarProps) {
 
       <button
         onClick={props.onSearch}
-        className="mx-3 mt-3 flex h-9 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-[#444] hover:text-foreground"
+        className="mx-3 mt-3 flex h-10 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-[#444] hover:text-foreground sm:h-9"
       >
         <Search size={14} />
         Search
-        <kbd className="ml-auto font-mono text-[10px]">⌘K</kbd>
+        <kbd className="ml-auto hidden font-mono text-[10px] sm:inline">⌘K</kbd>
       </button>
 
       <ContextMenu>
@@ -654,7 +657,7 @@ export function Sidebar(props: SidebarProps) {
           <ContextMenuItem onSelect={() => startCreateNote(currentDirectoryId)}>
             <FilePlus2 size={14} />
             New note
-            <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">
+            <kbd className="ml-auto hidden font-mono text-[10px] text-muted-foreground sm:inline">
               ⌃N
             </kbd>
           </ContextMenuItem>
@@ -663,7 +666,7 @@ export function Sidebar(props: SidebarProps) {
           >
             <FolderPlus size={14} />
             New directory
-            <kbd className="ml-auto font-mono text-[10px] text-muted-foreground">
+            <kbd className="ml-auto hidden font-mono text-[10px] text-muted-foreground sm:inline">
               ⌃⇧N
             </kbd>
           </ContextMenuItem>

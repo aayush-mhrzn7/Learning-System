@@ -115,7 +115,7 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
 
   return (
     <>
-      <div className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-4">
+      <div className="flex h-11 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border px-2 sm:h-10 sm:px-4">
         {tools.map((tool) => {
           const Icon = tool.icon;
           return (

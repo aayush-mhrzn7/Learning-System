@@ -117,11 +117,11 @@ export default function TrashPage() {
   const busy = emptying || Boolean(pendingId);
 
   return (
-    <main className="min-h-screen bg-background px-6 py-16 text-foreground sm:px-10">
+    <main className="min-h-screen bg-background px-4 py-10 text-foreground sm:px-10 sm:py-16">
       <div className="mx-auto w-full max-w-2xl">
-        <div className="mb-10 flex items-end justify-between gap-4">
+        <div className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div>
-            <p className="mb-8 text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+            <p className="mb-6 text-[11px] uppercase tracking-[0.22em] text-muted-foreground sm:mb-8">
               Learning System
             </p>
             <h1 className="text-[28px] font-medium leading-tight tracking-[-0.035em]">
@@ -132,7 +132,7 @@ export default function TrashPage() {
               good.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!loading && batches.length > 0 ? (
               <Button
                 variant="destructive"

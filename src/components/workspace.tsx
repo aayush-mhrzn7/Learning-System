@@ -17,18 +17,22 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { TreePayload } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const emptyTree: TreePayload = { directories: [], notes: [] };
+const MOBILE_MQ = "(max-width: 767px)";
+
+function isMobileViewport() {
+  return typeof window !== "undefined" && window.matchMedia(MOBILE_MQ).matches;
+}
 
 export function Workspace() {
   const [tree, setTree] = useState<TreePayload>(emptyTree);
   const treeRef = useRef<TreePayload>(emptyTree);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
-    typeof window === "undefined"
-      ? false
-      : localStorage.getItem("learning-sidebar-collapsed") === "true",
-  );
+  // Closed by default (esp. mobile). Desktop preference restored after mount.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [firstDirectoryOpen, setFirstDirectoryOpen] = useState(false);
@@ -39,6 +43,7 @@ export function Workspace() {
   const openNote = useCallback((id: string) => {
     setSelectedNoteId(id);
     localStorage.setItem("learning-last-note", id);
+    if (isMobileViewport()) setSidebarCollapsed(true);
   }, []);
 
   const loadTree = useCallback(
@@ -102,6 +107,24 @@ export function Workspace() {
   }, [loadTree]);
 
   useEffect(() => {
+    const mq = window.matchMedia(MOBILE_MQ);
+    function syncViewport() {
+      const mobile = mq.matches;
+      setIsMobile(mobile);
+      if (mobile) {
+        setSidebarCollapsed(true);
+        return;
+      }
+      setSidebarCollapsed(
+        localStorage.getItem("learning-sidebar-collapsed") === "true",
+      );
+    }
+    syncViewport();
+    mq.addEventListener("change", syncViewport);
+    return () => mq.removeEventListener("change", syncViewport);
+  }, []);
+
+  useEffect(() => {
     function shortcuts(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -114,16 +137,17 @@ export function Workspace() {
       if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
         event.preventDefault();
         setSidebarCollapsed((current) => {
-          localStorage.setItem(
-            "learning-sidebar-collapsed",
-            String(!current),
-          );
-          return !current;
+          const next = !current;
+          if (!isMobileViewport()) {
+            localStorage.setItem("learning-sidebar-collapsed", String(next));
+          }
+          return next;
         });
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
         setSettingsOpen(false);
+        if (isMobileViewport()) setSidebarCollapsed(true);
       }
     }
     window.addEventListener("keydown", shortcuts, true);
@@ -132,12 +156,16 @@ export function Workspace() {
 
   function collapseSidebar() {
     setSidebarCollapsed(true);
-    localStorage.setItem("learning-sidebar-collapsed", "true");
+    if (!isMobileViewport()) {
+      localStorage.setItem("learning-sidebar-collapsed", "true");
+    }
   }
 
   function openSidebar() {
     setSidebarCollapsed(false);
-    localStorage.setItem("learning-sidebar-collapsed", "false");
+    if (!isMobileViewport()) {
+      localStorage.setItem("learning-sidebar-collapsed", "false");
+    }
   }
 
   async function createFirstDirectory() {
@@ -178,9 +206,27 @@ export function Workspace() {
     );
   }
 
+  const sidebarOpen = !sidebarCollapsed;
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <div className={sidebarCollapsed ? "hidden" : undefined}>
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+      {sidebarOpen && isMobile ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/55"
+          aria-label="Close sidebar"
+          onClick={collapseSidebar}
+        />
+      ) : null}
+
+      <div
+        className={cn(
+          !sidebarOpen && "hidden",
+          isMobile &&
+            sidebarOpen &&
+            "fixed inset-y-0 left-0 z-50 w-[min(100vw-3rem,20rem)] shadow-2xl",
+        )}
+      >
         <Sidebar
           tree={tree}
           selectedNoteId={selectedNoteId}
@@ -188,8 +234,15 @@ export function Workspace() {
           onChanged={loadTree}
           onOptimisticTree={applyOptimisticTree}
           onCollapse={collapseSidebar}
-          onSearch={() => setSearchOpen(true)}
-          onSettings={() => setSettingsOpen(true)}
+          onSearch={() => {
+            if (isMobile) setSidebarCollapsed(true);
+            setSearchOpen(true);
+          }}
+          onSettings={() => {
+            if (isMobile) setSidebarCollapsed(true);
+            setSettingsOpen(true);
+          }}
+          mobile={isMobile}
         />
       </div>
 
@@ -203,11 +256,11 @@ export function Workspace() {
           onTitleChange={onNoteTitleChange}
         />
       ) : (
-        <main className="relative grid flex-1 place-items-center">
+        <main className="relative grid min-w-0 flex-1 place-items-center px-6">
           {sidebarCollapsed ? (
             <button
               onClick={openSidebar}
-              className="icon-button absolute left-4 top-4"
+              className="icon-button absolute left-3 top-3 sm:left-4 sm:top-4"
               aria-label="Open sidebar"
             >
               <PanelLeftOpen size={16} />

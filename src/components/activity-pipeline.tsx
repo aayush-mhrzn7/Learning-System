@@ -170,86 +170,94 @@ export function ActivityPipeline({
   if (!open) return null;
 
   return (
-    <aside
-      className="relative flex h-screen shrink-0 flex-col border-l border-border bg-[#080808]"
-      style={{ width }}
-    >
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize activity panel"
-        aria-valuemin={ACTIVITY_MIN_WIDTH}
-        aria-valuemax={ACTIVITY_MAX_WIDTH}
-        aria-valuenow={width}
-        tabIndex={0}
-        onPointerDown={onResizePointerDown}
-        onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-          event.preventDefault();
-          setWidth((current) => {
-            const delta = event.key === "ArrowLeft" ? 16 : -16;
-            const next = Math.min(
-              ACTIVITY_MAX_WIDTH,
-              Math.max(ACTIVITY_MIN_WIDTH, current + delta),
-            );
-            localStorage.setItem(ACTIVITY_WIDTH_KEY, String(next));
-            return next;
-          });
-        }}
-        className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-white/10 active:bg-white/20"
+    <>
+      <button
+        type="button"
+        className="fixed inset-0 z-40 bg-black/55 md:hidden"
+        aria-label="Close activity"
+        onClick={onClose}
       />
-      <div className="flex h-14 items-center justify-between border-b border-border px-4">
-        <div className="min-w-0">
-          <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
-            Activity
-          </p>
-          <p className="truncate text-xs font-medium">
-            {run ? KIND_LABEL[run.kind] : "No active run"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="icon-button"
-          aria-label="Close activity"
-        >
-          <PanelRightClose size={16} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        {!run ? (
-          <p className="px-1 text-xs leading-5 text-muted-foreground">
-            Live steps appear here when you fact-check, publish, or re-publish.
-          </p>
-        ) : (
-          <ol className="flex flex-col gap-1">
-            {run.steps.map((step) => (
-              <PipelineStepRow key={step.id} step={step} />
-            ))}
-          </ol>
-        )}
-      </div>
-
-      {run ? (
-        <div className="border-t border-border px-4 py-3">
-          <p
-            className={cn(
-              "text-[10px] uppercase tracking-[0.14em]",
-              run.status === "running" && "text-muted-foreground",
-              run.status === "success" && "text-foreground",
-              run.status === "failed" && "text-destructive",
-            )}
+      <aside
+        className="fixed inset-y-0 right-0 z-50 flex h-dvh max-md:!w-[min(100vw-3rem,22rem)] shrink-0 flex-col border-l border-border bg-[#080808] shadow-2xl md:relative md:z-auto md:h-screen md:shadow-none"
+        style={{ width }}
+      >
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize activity panel"
+          aria-valuemin={ACTIVITY_MIN_WIDTH}
+          aria-valuemax={ACTIVITY_MAX_WIDTH}
+          aria-valuenow={width}
+          tabIndex={0}
+          onPointerDown={onResizePointerDown}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            setWidth((current) => {
+              const delta = event.key === "ArrowLeft" ? 16 : -16;
+              const next = Math.min(
+                ACTIVITY_MAX_WIDTH,
+                Math.max(ACTIVITY_MIN_WIDTH, current + delta),
+              );
+              localStorage.setItem(ACTIVITY_WIDTH_KEY, String(next));
+              return next;
+            });
+          }}
+          className="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-col-resize touch-none hover:bg-white/10 active:bg-white/20 md:block"
+        />
+        <div className="flex h-14 items-center justify-between border-b border-border px-3 sm:px-4">
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+              Activity
+            </p>
+            <p className="truncate text-xs font-medium">
+              {run ? KIND_LABEL[run.kind] : "No active run"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="icon-button"
+            aria-label="Close activity"
           >
-            {run.status === "running"
-              ? "Running…"
-              : run.status === "success"
-                ? "Succeeded"
-                : "Failed"}
-          </p>
+            <PanelRightClose size={16} />
+          </button>
         </div>
-      ) : null}
-    </aside>
+
+        <div className="flex-1 overflow-y-auto px-3 py-4">
+          {!run ? (
+            <p className="px-1 text-xs leading-5 text-muted-foreground">
+              Live steps appear here when you fact-check, publish, or re-publish.
+            </p>
+          ) : (
+            <ol className="flex flex-col gap-1">
+              {run.steps.map((step) => (
+                <PipelineStepRow key={step.id} step={step} />
+              ))}
+            </ol>
+          )}
+        </div>
+
+        {run ? (
+          <div className="border-t border-border px-4 py-3">
+            <p
+              className={cn(
+                "text-[10px] uppercase tracking-[0.14em]",
+                run.status === "running" && "text-muted-foreground",
+                run.status === "success" && "text-foreground",
+                run.status === "failed" && "text-destructive",
+              )}
+            >
+              {run.status === "running"
+                ? "Running…"
+                : run.status === "success"
+                  ? "Succeeded"
+                  : "Failed"}
+            </p>
+          </div>
+        ) : null}
+      </aside>
+    </>
   );
 }
 
