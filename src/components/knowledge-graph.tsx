@@ -1,7 +1,7 @@
 "use client";
 
 import * as d3 from "d3";
-import { GraphStar, LoaderCircle, PanelLeftOpen } from "lucide-react";
+import { GraphStar, LoaderCircle, PanelLeftOpen, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { NoteKind } from "@/lib/types";
@@ -107,6 +107,7 @@ export function KnowledgeGraph({
   const [loading, setLoading] = useState(true);
   const [hoveredTitle, setHoveredTitle] = useState<string | null>(null);
   const [alwaysShowLabels, setAlwaysShowLabels] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   useEffect(() => {
     onOpenNoteRef.current = onOpenNote;
@@ -411,26 +412,41 @@ export function KnowledgeGraph({
               role="img"
               aria-label="Directory knowledge graph"
             />
-            <div className="absolute right-3 top-1/2 z-10 w-48 -translate-y-1/2 rounded-md border border-[#2a2a2a] bg-[#0c0c0c]/95 p-3 shadow-lg backdrop-blur-sm sm:right-4">
-              <p className="mb-2.5 text-[11px] font-medium tracking-wide text-[#888] uppercase">
-                Options
-              </p>
-              <div className="flex flex-col gap-3">
-                <label className="flex items-center justify-between gap-3">
-                  <span className="text-xs text-[#ccc]">Always show names</span>
-                  <Switch
-                    checked={alwaysShowLabels}
-                    onCheckedChange={setAlwaysShowLabels}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={centerOnNodes}
-                  className="h-8 rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 text-xs text-[#ddd] transition-colors hover:border-[#3a3a3a] hover:bg-[#1c1c1c] hover:text-white"
-                >
-                  Center on nodes
-                </button>
-              </div>
+            <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end gap-2 sm:right-4">
+              {optionsOpen ? (
+                <div className="w-48 rounded-md border border-[#2a2a2a] bg-[#0c0c0c]/95 p-3 shadow-lg backdrop-blur-sm">
+                  <p className="mb-2.5 text-[11px] font-medium tracking-wide text-[#888] uppercase">
+                    Options
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <label className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-[#ccc]">
+                        Always show names
+                      </span>
+                      <Switch
+                        checked={alwaysShowLabels}
+                        onCheckedChange={setAlwaysShowLabels}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={centerOnNodes}
+                      className="h-8 rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 text-xs text-[#ddd] transition-colors hover:border-[#3a3a3a] hover:bg-[#1c1c1c] hover:text-white"
+                    >
+                      Center on nodes
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="icon-button rounded-md border border-[#2a2a2a] bg-[#0c0c0c]/90 backdrop-blur-sm"
+                aria-label="Graph settings"
+                aria-expanded={optionsOpen}
+                onClick={() => setOptionsOpen((open) => !open)}
+              >
+                <Settings size={16} />
+              </button>
             </div>
           </>
         )}
