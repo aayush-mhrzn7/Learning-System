@@ -12,8 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  FONT_SIZE_LABELS,
+  FONT_SIZE_OPTIONS,
+  readFontSize,
   readMinimapEnabled,
+  writeFontSize,
   writeMinimapEnabled,
+  type FontSizeOption,
 } from "@/lib/editor-preferences";
 import {
   isEnabledProviderId,
@@ -190,6 +195,7 @@ export function SettingsDialog({
   const [saving, setSaving] = useState(false);
   const [section, setSection] = useState<SettingsSection>("providers");
   const [minimapEnabled, setMinimapEnabled] = useState(true);
+  const [fontSize, setFontSize] = useState<FontSizeOption>("md");
   const [statuses, setStatuses] = useState<
     Record<ProviderId, ConnectionStatus>
   >({
@@ -234,6 +240,7 @@ export function SettingsDialog({
   useEffect(() => {
     if (!open) return;
     setMinimapEnabled(readMinimapEnabled());
+    setFontSize(readFontSize());
   }, [open]);
 
   useEffect(() => {
@@ -410,22 +417,66 @@ export function SettingsDialog({
               <p className="mb-6 text-xs text-zinc-500">
                 Layout preferences for the note workspace.
               </p>
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                <div>
-                  <p className="text-xs text-zinc-100">Document minimap</p>
-                  <p className="mt-0.5 text-[13px] leading-5 text-zinc-500">
-                    Show the viewport overview and claim markers on the right
-                    edge of the note.
-                  </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-4 py-3">
+                  <div>
+                    <p className="text-xs text-zinc-100">Document minimap</p>
+                    <p className="mt-0.5 text-[13px] leading-5 text-zinc-500">
+                      Show the viewport overview and claim markers on the right
+                      edge of the note.
+                    </p>
+                  </div>
+                  <Switch
+                    size="md"
+                    checked={minimapEnabled}
+                    onCheckedChange={(checked) => {
+                      setMinimapEnabled(checked);
+                      writeMinimapEnabled(checked);
+                    }}
+                  />
                 </div>
-                <Switch
-                  size="md"
-                  checked={minimapEnabled}
-                  onCheckedChange={(checked) => {
-                    setMinimapEnabled(checked);
-                    writeMinimapEnabled(checked);
-                  }}
-                />
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-4 py-3">
+                  <div>
+                    <p className="text-xs text-zinc-100">Font size</p>
+                    <p className="mt-0.5 text-[13px] leading-5 text-zinc-500">
+                      Body text size in the note editor.
+                    </p>
+                  </div>
+                  <div
+                    role="radiogroup"
+                    aria-label="Font size"
+                    className="flex shrink-0 rounded-md border border-white/10 bg-black/40 p-0.5"
+                  >
+                    {FONT_SIZE_OPTIONS.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        role="radio"
+                        aria-checked={fontSize === option}
+                        aria-label={FONT_SIZE_LABELS[option]}
+                        title={FONT_SIZE_LABELS[option]}
+                        onClick={() => {
+                          setFontSize(option);
+                          writeFontSize(option);
+                        }}
+                        className={cn(
+                          "h-7 min-w-8 rounded px-2 text-[11px] font-medium transition-colors",
+                          fontSize === option
+                            ? "bg-white/15 text-zinc-50"
+                            : "text-zinc-500 hover:text-zinc-300",
+                        )}
+                      >
+                        {option === "sm"
+                          ? "S"
+                          : option === "md"
+                            ? "M"
+                            : option === "lg"
+                              ? "L"
+                              : "XL"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           ) : (

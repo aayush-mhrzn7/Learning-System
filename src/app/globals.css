@@ -228,6 +228,22 @@ button:disabled {
   line-height: 1.7;
 }
 
+.learning-editor[data-font-size="sm"] {
+  font-size: 12px;
+}
+
+.learning-editor[data-font-size="md"] {
+  font-size: 1.0625rem;
+}
+
+.learning-editor[data-font-size="lg"] {
+  font-size: 1.1875rem;
+}
+
+.learning-editor[data-font-size="xl"] {
+  font-size: 1.375rem;
+}
+
 @media (min-width: 640px) {
   .learning-editor {
     line-height: 1.8;

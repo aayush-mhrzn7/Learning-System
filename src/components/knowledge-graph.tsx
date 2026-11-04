@@ -203,6 +203,9 @@ export function KnowledgeGraph({
       .attr("fill", (d) => nodeFill(d))
       .attr("stroke", "none");
 
+    // Labels stay hidden until zoomed in far enough to avoid overlap.
+    const labelVisibleAt = 1.35;
+
     const label = node
       .append("text")
       .attr("text-anchor", "middle")
@@ -212,9 +215,10 @@ export function KnowledgeGraph({
       )
       .attr("font-size", 11)
       .attr("paint-order", "stroke")
-      .attr("stroke", "#1a1a1a")
+      .attr("stroke", "#000")
       .attr("stroke-width", 3)
       .attr("stroke-linejoin", "round")
+      .attr("opacity", 0)
       .text((d) =>
         d.title.length > 24 ? `${d.title.slice(0, 22).trimEnd()}…` : d.title,
       );
@@ -224,7 +228,8 @@ export function KnowledgeGraph({
       label
         .attr("font-size", 11 / scale)
         .attr("stroke-width", 3 / scale)
-        .attr("dy", (d) => nodeRadius(d) + 10 / scale);
+        .attr("dy", (d) => nodeRadius(d) + 10 / scale)
+        .attr("opacity", scale >= labelVisibleAt ? 1 : 0);
     }
 
     svg.call(
@@ -293,7 +298,7 @@ export function KnowledgeGraph({
         ) : (
           <svg
             ref={svgRef}
-            className="h-full w-full bg-[#1a1a1a]"
+            className="h-full w-full bg-black"
             role="img"
             aria-label="Directory knowledge graph"
           />

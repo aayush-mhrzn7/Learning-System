@@ -43,8 +43,11 @@ import {
 } from "@/components/ui/dialog";
 import { documentToText } from "@/lib/editor-text";
 import {
+  FONT_SIZE_CHANGED_EVENT,
   MINIMAP_CHANGED_EVENT,
+  readFontSize,
   readMinimapEnabled,
+  type FontSizeOption,
 } from "@/lib/editor-preferences";
 import type {
   ChecklistItem,
@@ -110,6 +113,7 @@ export function NoteEditor({
   const contentRef = useRef<HTMLElement | null>(null);
   const [minimapRevision, setMinimapRevision] = useState(0);
   const [minimapEnabled, setMinimapEnabled] = useState(true);
+  const [fontSize, setFontSize] = useState<FontSizeOption>("md");
 
   useEffect(() => {
     titleRef.current = title;
@@ -123,6 +127,16 @@ export function NoteEditor({
     }
     window.addEventListener(MINIMAP_CHANGED_EVENT, onChange);
     return () => window.removeEventListener(MINIMAP_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setFontSize(readFontSize());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ size: FontSizeOption }>).detail;
+      setFontSize(detail?.size ?? readFontSize());
+    }
+    window.addEventListener(FONT_SIZE_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(FONT_SIZE_CHANGED_EVENT, onChange);
   }, []);
 
   useEffect(() => {
@@ -160,6 +174,7 @@ export function NoteEditor({
       attributes: {
         class: "learning-editor",
         spellcheck: "true",
+        "data-font-size": "md",
       },
     },
     onUpdate: () => {
@@ -167,6 +182,12 @@ export function NoteEditor({
       setMinimapRevision((value) => value + 1);
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.view.dom.setAttribute("data-font-size", fontSize);
+    setMinimapRevision((value) => value + 1);
+  }, [editor, fontSize]);
 
   useEffect(() => {
     if (window.matchMedia("(min-width: 768px)").matches) {
