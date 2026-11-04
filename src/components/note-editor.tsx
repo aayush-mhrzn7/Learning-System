@@ -15,6 +15,7 @@ import {
   ScanSearch,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   ClaimFlags,
   claimFlagsKey,
@@ -64,7 +65,10 @@ export function NoteEditor({
   const titleRef = useRef(title);
   const noteIdRef = useRef(noteId);
   const claimsRef = useRef<ClaimFlag[]>([]);
-  const loadingContent = useRef(false);
+  // Block autosave until the note for noteId is loaded into the editor.
+  // Otherwise an empty initial doc (or a stale prior note) can overwrite Neon.
+  const loadingContent = useRef(true);
+  const hydratedNoteId = useRef<string | null>(null);
   const saveNowRef = useRef<() => Promise<void>>(async () => undefined);
   const hoverTimer = useRef<number | null>(null);
 
@@ -121,9 +125,11 @@ export function NoteEditor({
 
   const saveNow = useCallback(async () => {
     if (!editor || loadingContent.current || !editor.isEditable) return;
+    const targetNoteId = noteIdRef.current;
+    if (hydratedNoteId.current !== targetNoteId) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSaveState("saving");
-    const response = await fetch(`/api/notes/${noteIdRef.current}`, {
+    const response = await fetch(`/api/notes/${targetNoteId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -132,6 +138,7 @@ export function NoteEditor({
         plainText: editor.getText({ blockSeparator: "\n" }),
       }),
     });
+    if (noteIdRef.current !== targetNoteId) return;
     if (!response.ok) {
       setSaveState("error");
       return;
@@ -155,7 +162,7 @@ export function NoteEditor({
     );
     setTitle(data.note.title);
     titleRef.current = data.note.title;
-    onTitleChange(noteIdRef.current, data.note.title);
+    onTitleChange(targetNoteId, data.note.title);
     setSaveState("saved");
     await onTreeChanged();
   }, [editor, onTitleChange, onTreeChanged]);
@@ -174,7 +181,11 @@ export function NoteEditor({
   }
 
   useEffect(() => {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    loadingContent.current = true;
+    hydratedNoteId.current = null;
     noteIdRef.current = noteId;
+    setPayload(null);
     if (!editor) return;
     let cancelled = false;
 
@@ -182,9 +193,8 @@ export function NoteEditor({
       const response = await fetch(`/api/notes/${noteId}`);
       if (!response.ok || cancelled) return;
       const data = (await response.json()) as NotePayload;
-      loadingContent.current = true;
+      if (cancelled || noteIdRef.current !== noteId) return;
       editor.commands.setContent(data.note.content);
-      loadingContent.current = false;
       setTitle(data.note.title);
       titleRef.current = data.note.title;
       claimsRef.current = data.claims;
@@ -193,10 +203,14 @@ export function NoteEditor({
       );
       setPayload(data);
       setSaveState("saved");
+      hydratedNoteId.current = noteId;
+      loadingContent.current = false;
     })();
 
     return () => {
       cancelled = true;
+      loadingContent.current = true;
+      hydratedNoteId.current = null;
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
   }, [editor, noteId]);
@@ -228,6 +242,7 @@ export function NoteEditor({
       const decoder = new TextDecoder();
       let buffer = "";
       let completed = 0;
+      let total = 0;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -244,15 +259,22 @@ export function NoteEditor({
             incomplete?: boolean;
             error?: string;
           };
+          if (event.type === "extracting") {
+            setCheckingProgress("Extracting claims");
+          }
           if (event.type === "start") {
-            setCheckingProgress(`Checking 0 of ${event.total ?? 0}`);
+            total = event.total ?? 0;
+            setCheckingProgress(`Checking 0 of ${total}`);
           }
           if (event.type === "claim" && event.claim) {
             completed += 1;
             applyClaims([...claimsRef.current, event.claim]);
-            setCheckingProgress(`Checked ${completed}`);
+            setCheckingProgress(`Checked ${completed} of ${total}`);
           }
-          if (event.type === "claim_error") completed += 1;
+          if (event.type === "claim_error") {
+            completed += 1;
+            setCheckingProgress(`Checked ${completed} of ${total}`);
+          }
           if (event.type === "done") {
             setPayload((current) =>
               current
@@ -269,7 +291,10 @@ export function NoteEditor({
           if (event.type === "error") throw new Error(event.error);
         }
       }
-    } catch {
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Fact-check failed",
+      );
       setPayload((current) =>
         current
           ? {

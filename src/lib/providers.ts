@@ -7,11 +7,13 @@ export const PROVIDER_DEFAULTS: Record<
   { model: string; baseUrl: string }
 > = {
   gpt: {
-    model: "gpt-5.6-luna",
+    model: "gpt-5-nano",
     baseUrl: "https://api.openai.com/v1",
   },
   openrouter: {
-    model: "openai/gpt-4.1-mini",
+    // Free model; web search via OpenRouter server tool (search fees apply).
+    // Gemma :free is often upstream rate-limited; Nemotron has been more available.
+    model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     baseUrl: "https://openrouter.ai/api/v1",
   },
 };
@@ -25,6 +27,4 @@ export type ResolvedProviderCredentials = {
   apiKey: string;
   model: string;
   baseUrl: string;
-  /** OpenAI Responses web_search is only reliable on OpenAI's API. */
-  supportsWebSearch: boolean;
 };

@@ -7,6 +7,7 @@ import {
   FilePlus2,
   Folder,
   FolderPlus,
+  LogOut,
   Pencil,
   PanelLeftClose,
   Search,
@@ -601,6 +602,26 @@ export function Sidebar(props: SidebarProps) {
         >
           <Trash2 size={14} />
           Trash
+        </button>
+        <button
+          onClick={() => {
+            void (async () => {
+              try {
+                const response = await fetch("/api/auth/logout", {
+                  method: "POST",
+                });
+                if (!response.ok) throw new Error("logout failed");
+                router.replace("/login");
+                router.refresh();
+              } catch {
+                toast.error("Could not log out");
+              }
+            })();
+          }}
+          className="sidebar-row w-full text-muted-foreground hover:text-foreground"
+        >
+          <LogOut size={14} />
+          Log out
         </button>
       </div>
 

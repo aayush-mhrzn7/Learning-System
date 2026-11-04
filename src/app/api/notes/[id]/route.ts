@@ -69,6 +69,18 @@ export async function PATCH(request: Request, context: Context) {
     return Response.json({ error: "Note not found" }, { status: 404 });
   }
 
+  // Guard against client races that autosave an empty editor over a real note.
+  if (
+    body.data.plainText !== undefined &&
+    current.plainText.trim().length > 80 &&
+    body.data.plainText.trim().length === 0
+  ) {
+    return Response.json(
+      { error: "Refusing to overwrite note with empty content" },
+      { status: 409 },
+    );
+  }
+
   const changed =
     (body.data.title !== undefined && body.data.title !== current.title) ||
     (body.data.plainText !== undefined &&

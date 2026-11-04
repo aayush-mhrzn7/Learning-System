@@ -1,13 +1,16 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { claims, notes } from "@/db/schema";
-import { extractClaims, judgeClaim } from "@/lib/ai";
+import { extractClaims, judgeClaim, mapPool } from "@/lib/ai";
 import { requireUserId } from "@/lib/auth";
 import { documentToText } from "@/lib/editor-text";
 import { resolveActiveProviderCredentials } from "@/lib/provider-credentials";
 import { idSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
+
+/** Free OpenRouter + web search: keep this low to avoid timeouts/rate limits. */
+const JUDGE_CONCURRENCY = 2;
 
 export async function POST(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
@@ -54,38 +57,36 @@ export async function POST(_request: Request, context: Context) {
           .set({ factCheckIncomplete: true })
           .where(and(eq(notes.id, id), eq(notes.userId, userId)));
 
+        send({ type: "extracting" });
         const noteText = documentToText(note.content, { skipCode: true });
         const extracted = await extractClaims(credentials, noteText);
         await db.delete(claims).where(eq(claims.noteId, id));
         send({ type: "start", total: extracted.length });
 
         let failed = 0;
-        await Promise.all(
-          extracted.map(async ({ text }) => {
-            try {
-              const verdict = await judgeClaim(credentials, text);
-              const [claim] = await db
-                .insert(claims)
-                .values({
-                  noteId: id,
-                  claimText: text,
-                  verdict: verdict.verdict,
-                  reason: verdict.reason,
-                  sources: verdict.sources,
-                })
-                .returning();
-              send({ type: "claim", claim });
-            } catch (error) {
-              failed += 1;
-              send({
-                type: "claim_error",
+        await mapPool(extracted, JUDGE_CONCURRENCY, async ({ text }) => {
+          try {
+            const verdict = await judgeClaim(credentials, text);
+            const [claim] = await db
+              .insert(claims)
+              .values({
+                noteId: id,
                 claimText: text,
-                error:
-                  error instanceof Error ? error.message : "Check failed",
-              });
-            }
-          }),
-        );
+                verdict: verdict.verdict,
+                reason: verdict.reason,
+                sources: verdict.sources,
+              })
+              .returning();
+            send({ type: "claim", claim });
+          } catch (error) {
+            failed += 1;
+            send({
+              type: "claim_error",
+              claimText: text,
+              error: error instanceof Error ? error.message : "Check failed",
+            });
+          }
+        });
 
         await db
           .update(notes)
@@ -93,9 +94,14 @@ export async function POST(_request: Request, context: Context) {
           .where(and(eq(notes.id, id), eq(notes.userId, userId)));
         send({ type: "done", incomplete: failed > 0 });
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Fact-check failed";
         send({
           type: "error",
-          error: error instanceof Error ? error.message : "Fact-check failed",
+          error:
+            /timed out/i.test(message)
+              ? "Request timed out while talking to the model. Try again, or use a faster OpenRouter model."
+              : message,
         });
       } finally {
         controller.close();

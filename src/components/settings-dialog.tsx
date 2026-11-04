@@ -26,6 +26,22 @@ type SettingsState = {
   providers: Record<ProviderId, ProviderView>;
 };
 
+type ConnectionStatus = {
+  configured: boolean;
+  active: boolean;
+  ok: boolean | null;
+  label: string;
+  detail: string | null;
+};
+
+const checkingStatus: ConnectionStatus = {
+  configured: false,
+  active: false,
+  ok: null,
+  label: "Checking…",
+  detail: null,
+};
+
 const emptySettings: SettingsState = {
   activeProvider: "gpt",
   providers: {
@@ -63,7 +79,7 @@ const providerMeta: Record<
   },
   openrouter: {
     name: "OpenRouter",
-    blurb: "Multi-model gateway",
+    blurb: "Free models + web search tool",
     iconSrc: "/icons/openrouter.svg",
     iconAlt: "OpenRouter",
     iconShell: "dark",
@@ -161,6 +177,46 @@ export function SettingsDialog({
   );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [statuses, setStatuses] = useState<
+    Record<ProviderId, ConnectionStatus>
+  >({
+    gpt: checkingStatus,
+    openrouter: checkingStatus,
+  });
+
+  async function refreshStatuses() {
+    setStatuses({
+      gpt: { ...checkingStatus, label: "Checking…" },
+      openrouter: { ...checkingStatus, label: "Checking…" },
+    });
+    try {
+      const response = await fetch("/api/settings/providers/status", {
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("status failed");
+      const data = (await response.json()) as {
+        statuses: Record<ProviderId, ConnectionStatus>;
+      };
+      setStatuses(data.statuses);
+    } catch {
+      setStatuses({
+        gpt: {
+          configured: false,
+          active: false,
+          ok: false,
+          label: "Status unavailable",
+          detail: null,
+        },
+        openrouter: {
+          configured: false,
+          active: false,
+          ok: false,
+          label: "Status unavailable",
+          detail: null,
+        },
+      });
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -182,6 +238,7 @@ export function SettingsDialog({
         setModelDraft(active.model);
         setBaseUrlDraft(active.baseUrl);
         setApiKeyDraft("");
+        void refreshStatuses();
       } catch {
         if (!cancelled) toast.error("Could not load provider settings");
       } finally {
@@ -222,6 +279,7 @@ export function SettingsDialog({
       setSettings(data);
       setApiKeyDraft("");
       toast.success("Provider saved");
+      void refreshStatuses();
     } catch {
       toast.error("Could not save provider");
     } finally {
@@ -249,6 +307,7 @@ export function SettingsDialog({
       }
       setSettings(data);
       setSelected(id);
+      void refreshStatuses();
     } catch {
       toast.error("Could not switch provider");
     } finally {
@@ -258,6 +317,7 @@ export function SettingsDialog({
 
   const provider = settings.providers[selected];
   const meta = providerMeta[selected];
+  const selectedStatus = statuses[selected];
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -301,6 +361,7 @@ export function SettingsDialog({
                 {(Object.keys(providerMeta) as ProviderId[]).map((id) => {
                   const item = providerMeta[id];
                   const enabled = settings.activeProvider === id;
+                  const status = statuses[id];
                   return (
                     <div
                       key={id}
@@ -319,12 +380,9 @@ export function SettingsDialog({
                           <span className="block truncate text-xs text-zinc-100">
                             {item.name}
                           </span>
-                          <span className="block truncate text-[11px] text-zinc-500">
-                            {settings.providers[id].apiKeyConfigured
-                              ? enabled
-                                ? "Active"
-                                : "Configured"
-                              : "Not configured"}
+                          <span className="flex items-center gap-1.5 truncate text-[11px] text-zinc-500">
+                            <StatusDot status={status} />
+                            {status.label}
                           </span>
                         </span>
                       </button>
@@ -357,6 +415,19 @@ export function SettingsDialog({
                   </div>
 
                   <div className="flex flex-col gap-5">
+                    <Field
+                      label="Status"
+                      description={
+                        selectedStatus.detail ??
+                        "Live check against this provider’s API."
+                      }
+                    >
+                      <div className="flex h-9 items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 text-xs text-zinc-200">
+                        <StatusDot status={selectedStatus} />
+                        <span>{selectedStatus.label}</span>
+                      </div>
+                    </Field>
+
                     <Field
                       label="Display name"
                       description="Label shown in the provider list."
@@ -395,7 +466,11 @@ export function SettingsDialog({
 
                     <Field
                       label="Default model"
-                      description="Model id used for fact-check and gap analysis."
+                      description={
+                        selected === "openrouter"
+                          ? "Default is nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free (tokens free; OpenRouter web search still uses credits)."
+                          : "Model id used for fact-check and gap analysis."
+                      }
                     >
                       <Input
                         value={modelDraft}
@@ -461,6 +536,26 @@ export function SettingsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StatusDot({ status }: { status: ConnectionStatus }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        status.label === "Checking…"
+          ? "bg-zinc-500"
+          : status.ok === true
+            ? status.active
+              ? "bg-emerald-400"
+              : "bg-sky-400"
+            : status.ok === false
+              ? "bg-rose-400"
+              : "bg-zinc-600",
+      )}
+    />
   );
 }
 

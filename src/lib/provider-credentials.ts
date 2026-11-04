@@ -206,6 +206,150 @@ export async function resolveActiveProviderCredentials(
     apiKey: decryptSecret(row.apiKeyCiphertext),
     model: row.model,
     baseUrl: row.baseUrl.replace(/\/$/, ""),
-    supportsWebSearch: row.provider === "gpt",
   };
+}
+
+export type ProviderConnectionStatus = {
+  configured: boolean;
+  active: boolean;
+  ok: boolean | null;
+  label: string;
+  detail: string | null;
+};
+
+async function probeProviderKey(
+  provider: ProviderId,
+  apiKey: string,
+  baseUrl: string,
+): Promise<{ ok: boolean; rejected: boolean; detail: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  const root = baseUrl.replace(/\/$/, "");
+
+  try {
+    if (provider === "openrouter") {
+      const keyResponse = await fetch("https://openrouter.ai/api/v1/key", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      if (keyResponse.ok) {
+        const payload = (await keyResponse.json()) as {
+          data?: { limit_remaining?: number | null };
+        };
+        const remaining = payload.data?.limit_remaining;
+        return {
+          ok: true,
+          rejected: false,
+          detail:
+            typeof remaining === "number"
+              ? `Credits remaining ≈ $${remaining.toFixed(4)}`
+              : "API key valid",
+        };
+      }
+      if (keyResponse.status === 401 || keyResponse.status === 403) {
+        return {
+          ok: false,
+          rejected: true,
+          detail: "API key rejected",
+        };
+      }
+      // Fall through to /models if /key is flaky.
+    }
+
+    const response = await fetch(`${root}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      const rejected = response.status === 401 || response.status === 403;
+      return {
+        ok: false,
+        rejected,
+        detail: rejected ? "API key rejected" : `HTTP ${response.status}`,
+      };
+    }
+    return { ok: true, rejected: false, detail: "API key valid" };
+  } catch (error) {
+    return {
+      ok: false,
+      rejected: false,
+      detail:
+        error instanceof Error && error.name === "AbortError"
+          ? "Timed out reaching provider"
+          : "Could not reach provider",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function getProviderConnectionStatuses(
+  userId: string,
+): Promise<Record<ProviderId, ProviderConnectionStatus>> {
+  const view = await getProviderSettingsView(userId);
+  const rows = await db
+    .select()
+    .from(providerCredentials)
+    .where(eq(providerCredentials.userId, userId));
+
+  const byProvider = Object.fromEntries(
+    rows.map((row) => [row.provider, row]),
+  ) as Partial<Record<ProviderId, (typeof rows)[number]>>;
+
+  const entries = await Promise.all(
+    (["gpt", "openrouter"] as ProviderId[]).map(async (provider) => {
+      const configured = view.providers[provider].apiKeyConfigured;
+      const active = view.activeProvider === provider;
+      if (!configured || !byProvider[provider]) {
+        return [
+          provider,
+          {
+            configured: false,
+            active,
+            ok: null,
+            label: "Not configured",
+            detail: null,
+          } satisfies ProviderConnectionStatus,
+        ] as const;
+      }
+
+      const row = byProvider[provider];
+      const probe = await probeProviderKey(
+        provider,
+        decryptSecret(row.apiKeyCiphertext),
+        row.baseUrl,
+      );
+
+      if (!probe.ok) {
+        return [
+          provider,
+          {
+            configured: true,
+            active,
+            ok: false,
+            label: probe.rejected ? "Invalid key" : "Unreachable",
+            detail: probe.detail,
+          } satisfies ProviderConnectionStatus,
+        ] as const;
+      }
+
+      return [
+        provider,
+        {
+          configured: true,
+          active,
+          ok: true,
+          label: active ? "Active" : "Connected",
+          detail: probe.detail,
+        } satisfies ProviderConnectionStatus,
+      ] as const;
+    }),
+  );
+
+  return Object.fromEntries(entries) as Record<
+    ProviderId,
+    ProviderConnectionStatus
+  >;
 }
