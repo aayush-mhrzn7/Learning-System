@@ -930,7 +930,7 @@ export function NoteEditor({
           ) : null}
         </div>
 
-        {editor ? <InlineChat editor={editor} /> : null}
+        {editor ? <InlineChat editor={editor} noteId={noteId} /> : null}
 
         {hovered ? (
           <aside

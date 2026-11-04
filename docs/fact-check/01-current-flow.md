@@ -71,7 +71,7 @@ Gaps (`findMissingTopics`) are a **separate** manual route — not part of this 
 ### Related editor UI (not in this pipeline)
 
 - **Minimap** — Settings → Editor → Document minimap; claim markers for incorrect decorations.
-- **Inline chat** — selection chip / ⌘K; UI only (no model yet).
+- **Inline chat** — selection chip / ⌘J → `POST .../inline-chat` (tutor Q&A on selection + local note context; no web search / no auto-rewrite).
 
 ---
 

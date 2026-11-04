@@ -1,8 +1,9 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
-import { MessageSquarePlus, Sparkles, X } from "lucide-react";
+import { LoaderCircle, MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 type SelectionAnchor = {
   top: number;
@@ -10,11 +11,27 @@ type SelectionAnchor = {
   text: string;
 };
 
-export function InlineChat({ editor }: { editor: Editor }) {
+type ChatTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export function InlineChat({
+  editor,
+  noteId,
+}: {
+  editor: Editor;
+  noteId: string;
+}) {
   const [anchor, setAnchor] = useState<SelectionAnchor | null>(null);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const turnsEndRef = useRef<HTMLDivElement | null>(null);
+  const selectionRef = useRef("");
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     function syncSelection() {
@@ -34,6 +51,7 @@ export function InlineChat({ editor }: { editor: Editor }) {
         left: Math.min(end.left, window.innerWidth - 360),
         text,
       });
+      if (!open) selectionRef.current = text;
     }
 
     editor.on("selectionUpdate", syncSelection);
@@ -57,6 +75,16 @@ export function InlineChat({ editor }: { editor: Editor }) {
   }, [open]);
 
   useEffect(() => {
+    turnsEndRef.current?.scrollIntoView({ block: "nearest" });
+  }, [turns, busy]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "j") {
         return;
@@ -68,6 +96,7 @@ export function InlineChat({ editor }: { editor: Editor }) {
       const text = editor.state.doc.textBetween(from, to, "\n").trim();
       if (!text) return;
       const end = editor.view.coordsAtPos(to);
+      selectionRef.current = text;
       setAnchor({
         top: end.bottom + 8,
         left: Math.min(end.left, window.innerWidth - 360),
@@ -79,12 +108,67 @@ export function InlineChat({ editor }: { editor: Editor }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [editor]);
 
+  function closeChat() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setOpen(false);
+    setDraft("");
+    setTurns([]);
+    setBusy(false);
+    if (editor.state.selection.empty) setAnchor(null);
+  }
+
+  async function send() {
+    const question = draft.trim();
+    const selection = selectionRef.current || anchor?.text || "";
+    if (!question || !selection || busy) return;
+
+    const history = turns.slice(-6);
+    setDraft("");
+    setTurns((prev) => [...prev, { role: "user", content: question }]);
+    setBusy(true);
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const response = await fetch(`/api/notes/${noteId}/inline-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({ selection, question, history }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        answer?: string;
+        error?: string;
+      } | null;
+      if (!response.ok || !data?.answer) {
+        throw new Error(data?.error || "Inline chat failed");
+      }
+      setTurns((prev) => [
+        ...prev,
+        { role: "assistant", content: data.answer! },
+      ]);
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setTurns((prev) => prev.slice(0, -1));
+      setDraft(question);
+      toast.error(
+        error instanceof Error ? error.message : "Inline chat failed",
+      );
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setBusy(false);
+    }
+  }
+
   if (!anchor) return null;
 
   const preview =
-    anchor.text.length > 140
-      ? `${anchor.text.slice(0, 140).trimEnd()}…`
-      : anchor.text;
+    (selectionRef.current || anchor.text).length > 140
+      ? `${(selectionRef.current || anchor.text).slice(0, 140).trimEnd()}…`
+      : selectionRef.current || anchor.text;
 
   return (
     <div
@@ -96,7 +180,10 @@ export function InlineChat({ editor }: { editor: Editor }) {
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            selectionRef.current = anchor.text;
+            setOpen(true);
+          }}
           className="flex items-center gap-1.5 rounded-md border border-[#333] bg-[#141414] px-2.5 py-1.5 text-[11px] text-[#ddd] shadow-xl hover:border-[#555] hover:bg-[#1a1a1a]"
         >
           <MessageSquarePlus size={13} className="text-[#aaa]" />
@@ -118,16 +205,36 @@ export function InlineChat({ editor }: { editor: Editor }) {
             <button
               type="button"
               aria-label="Close inline chat"
-              onClick={() => {
-                setOpen(false);
-                setDraft("");
-                if (editor.state.selection.empty) setAnchor(null);
-              }}
+              onClick={closeChat}
               className="rounded p-0.5 text-[#666] hover:bg-white/5 hover:text-[#ccc]"
             >
               <X size={13} />
             </button>
           </div>
+          {turns.length > 0 || busy ? (
+            <div className="max-h-48 space-y-2 overflow-y-auto border-b border-[#2a2a2a] px-3 py-2">
+              {turns.map((turn, index) => (
+                <p
+                  key={`${turn.role}-${index}`}
+                  className={`whitespace-pre-wrap text-[11px] leading-4 ${
+                    turn.role === "user" ? "text-[#aaa]" : "text-[#ddd]"
+                  }`}
+                >
+                  <span className="text-[#666]">
+                    {turn.role === "user" ? "You · " : "Tutor · "}
+                  </span>
+                  {turn.content}
+                </p>
+              ))}
+              {busy ? (
+                <p className="flex items-center gap-1.5 text-[11px] text-[#777]">
+                  <LoaderCircle size={12} className="animate-spin" />
+                  Thinking…
+                </p>
+              ) : null}
+              <div ref={turnsEndRef} />
+            </div>
+          ) : null}
           <div className="p-2">
             <textarea
               ref={inputRef}
@@ -135,19 +242,19 @@ export function InlineChat({ editor }: { editor: Editor }) {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
-                  setOpen(false);
-                  setDraft("");
+                  event.preventDefault();
+                  closeChat();
                   return;
                 }
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  // UI only for now — wire model later.
-                  setDraft("");
+                  void send();
                 }
               }}
               rows={2}
+              disabled={busy}
               placeholder="Ask about this selection…"
-              className="w-full resize-none rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-2.5 py-2 text-[12px] leading-5 text-[#eee] outline-none placeholder:text-[#555] focus:border-[#444]"
+              className="w-full resize-none rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-2.5 py-2 text-[12px] leading-5 text-[#eee] outline-none placeholder:text-[#555] focus:border-[#444] disabled:opacity-60"
             />
             <div className="mt-1.5 flex items-center justify-between px-0.5">
               <span className="text-[10px] text-[#555]">
@@ -155,8 +262,8 @@ export function InlineChat({ editor }: { editor: Editor }) {
               </span>
               <button
                 type="button"
-                disabled={!draft.trim()}
-                onClick={() => setDraft("")}
+                disabled={!draft.trim() || busy}
+                onClick={() => void send()}
                 className="rounded-md bg-white px-2 py-1 text-[10px] font-medium text-black disabled:opacity-30"
               >
                 Send

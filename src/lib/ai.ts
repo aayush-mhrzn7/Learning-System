@@ -608,6 +608,65 @@ export async function judgeClaim(
   return verdict;
 }
 
+const inlineReplySchema = z.object({
+  answer: z.string().min(1).max(4000),
+});
+
+/** Tutor reply about a selected passage — no web search, no note rewrites. */
+export async function answerInlineSelection(
+  credentials: ResolvedProviderCredentials,
+  args: {
+    selection: string;
+    question: string;
+    noteContext: string;
+    history?: { role: "user" | "assistant"; content: string }[];
+  },
+) {
+  const history = (args.history ?? []).slice(-6);
+  const packed = [
+    "SELECTED PASSAGE:",
+    args.selection.trim(),
+    "",
+    "SURROUNDING NOTE CONTEXT:",
+    args.noteContext.trim() || "(none)",
+    "",
+    history.length
+      ? `PRIOR TURNS:\n${history
+          .map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`)
+          .join("\n\n")}`
+      : "",
+    "",
+    "QUESTION:",
+    args.question.trim(),
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+
+  const data = await structuredResponse<unknown>(
+    credentials,
+    "inline_chat_reply",
+    {
+      type: "object",
+      properties: {
+        answer: { type: "string" },
+      },
+      required: ["answer"],
+      additionalProperties: false,
+    },
+    [
+      "You are a concise learning tutor for the learner's own note.",
+      "Answer the QUESTION about the SELECTED PASSAGE, using SURROUNDING NOTE CONTEXT only for interpretation.",
+      "Explain clearly; correct misconceptions when they appear in the selection.",
+      "Do not rewrite the note, invent paste-ready replacement prose, or critique writing style.",
+      "Keep the answer short (a few sentences unless the question needs a short list).",
+      "If the question is outside the selection/context, say what is missing instead of guessing.",
+    ].join(" "),
+    packed,
+    false,
+  );
+  return inlineReplySchema.parse(data).answer.trim();
+}
+
 export async function findMissingTopics(
   credentials: ResolvedProviderCredentials,
   noteText: string,
