@@ -149,6 +149,35 @@ export const notes = pgTable(
   ],
 );
 
+/** Obsidian-style note↔note edges for the knowledge graph. */
+export const noteLinks = pgTable(
+  "note_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sourceNoteId: uuid("source_note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    targetNoteId: uuid("target_note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("note_links_source_target_idx").on(
+      table.sourceNoteId,
+      table.targetNoteId,
+    ),
+    index("note_links_user_idx").on(table.userId),
+    index("note_links_source_idx").on(table.sourceNoteId),
+    index("note_links_target_idx").on(table.targetNoteId),
+  ],
+);
+
 export const claims = pgTable(
   "claims",
   {
@@ -216,6 +245,7 @@ export const providerCredentials = pgTable(
 export type User = typeof users.$inferSelect;
 export type Directory = typeof directories.$inferSelect;
 export type Note = typeof notes.$inferSelect;
+export type NoteLink = typeof noteLinks.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
 export type ChecklistItem = typeof checklistItems.$inferSelect;
 export type ProviderCredential = typeof providerCredentials.$inferSelect;

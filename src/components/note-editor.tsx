@@ -333,7 +333,8 @@ export function NoteEditor({
     const run = createPipelineRun(kind, { skipFactCheck });
     pipelineStepRef.current = "save";
     setPipelineRun(run);
-    setPipelineOpen(true);
+    // Publish as-is should not flash the fact-check activity rail.
+    if (!skipFactCheck) setPipelineOpen(true);
     setPipelineBusy(true);
     if (!skipFactCheck) applyClaims([]);
 
@@ -381,6 +382,9 @@ export function NoteEditor({
             current ? { ...current, status: "success" } : current,
           );
         }
+        toast.success(
+          kind === "re-publish" ? "Re-published as-is" : "Published as-is",
+        );
         return;
       }
 

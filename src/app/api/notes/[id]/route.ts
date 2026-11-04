@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { checklistItems, claims, directories, notes } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
+import { syncWikiLinksFromPlainText } from "@/lib/note-links";
 import { idSchema, noteUpdateSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
@@ -122,6 +123,7 @@ export async function PATCH(request: Request, context: Context) {
       SET stale = position(lower(claim_text) in lower(${body.data.plainText})) = 0
       WHERE note_id = ${id}::uuid
     `);
+    await syncWikiLinksFromPlainText(userId, id, body.data.plainText);
   }
 
   return Response.json({ note });

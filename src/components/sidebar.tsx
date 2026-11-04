@@ -13,7 +13,8 @@ import {
   Search,
   Settings,
   Trash2,
-  Waypoints,
+  DiagramFlowHorizontal,
+  GraphStar,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -97,6 +98,7 @@ type SidebarProps = {
   onOptimisticTree: (updater: (tree: TreePayload) => TreePayload) => void;
   onCollapse: () => void;
   onSearch: () => void;
+  onKnowledgeGraph: () => void;
   onSettings: () => void;
   mobile?: boolean;
 };
@@ -692,6 +694,14 @@ export function Sidebar(props: SidebarProps) {
         <kbd className="ml-auto hidden font-mono text-[12px] sm:inline">⌘K</kbd>
       </button>
 
+      <button
+        onClick={props.onKnowledgeGraph}
+        className="mx-3 mt-2 flex h-10 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-[#444] hover:text-foreground sm:h-9"
+      >
+        <GraphStar size={14} />
+        Knowledge graph
+      </button>
+
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
@@ -792,7 +802,7 @@ export function Sidebar(props: SidebarProps) {
           <ContextMenuItem
             onSelect={() => startCreateNote(currentDirectoryId, "visualize")}
           >
-            <Waypoints size={14} />
+            <DiagramFlowHorizontal size={14} />
             New visualize note
           </ContextMenuItem>
           <ContextMenuItem
@@ -1138,7 +1148,7 @@ function DirectoryNode(props: DirectoryNodeProps) {
           <ContextMenuItem
             onSelect={() => props.onCreateVisualizeNote(props.directory.id)}
           >
-            <Waypoints size={14} />
+            <DiagramFlowHorizontal size={14} />
             New visualize note
           </ContextMenuItem>
           <ContextMenuItem
@@ -1190,7 +1200,7 @@ function DirectoryNode(props: DirectoryNodeProps) {
                   }`}
                 >
                   {note.kind === "visualize" ? (
-                    <Waypoints size={13} className="shrink-0 opacity-60" />
+                    <DiagramFlowHorizontal size={13} className="shrink-0 opacity-60" />
                   ) : (
                     <FileText size={13} className="shrink-0 opacity-60" />
                   )}

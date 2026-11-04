@@ -2,6 +2,7 @@
 
 import { FolderPlus, PanelLeftOpen } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { NoteEditor } from "@/components/note-editor";
 import { SearchDialog } from "@/components/search-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
@@ -36,12 +37,14 @@ export function Workspace() {
   const [isMobile, setIsMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
   const [firstDirectoryOpen, setFirstDirectoryOpen] = useState(false);
   const [firstDirectoryName, setFirstDirectoryName] = useState("");
   const [creatingDirectory, setCreatingDirectory] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const openNote = useCallback((id: string) => {
+    setGraphOpen(false);
     setSelectedNoteId(id);
     localStorage.setItem("learning-last-note", id);
     if (isMobileViewport()) setSidebarCollapsed(true);
@@ -239,6 +242,10 @@ export function Workspace() {
             if (isMobile) setSidebarCollapsed(true);
             setSearchOpen(true);
           }}
+          onKnowledgeGraph={() => {
+            if (isMobile) setSidebarCollapsed(true);
+            setGraphOpen(true);
+          }}
           onSettings={() => {
             if (isMobile) setSidebarCollapsed(true);
             setSettingsOpen(true);
@@ -247,7 +254,13 @@ export function Workspace() {
         />
       </div>
 
-      {selectedNoteId ? (
+      {graphOpen ? (
+        <KnowledgeGraph
+          sidebarCollapsed={sidebarCollapsed}
+          onOpenSidebar={openSidebar}
+          onOpenNote={openNote}
+        />
+      ) : selectedNoteId ? (
         tree.notes.find((note) => note.id === selectedNoteId)?.kind ===
         "visualize" ? (
           <VisualizeNote

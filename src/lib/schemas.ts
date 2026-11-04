@@ -60,3 +60,17 @@ export const checklistUpdateSchema = z.object({
 export const searchSchema = z.object({
   q: z.string().trim().min(1).max(200),
 });
+
+export const noteLinkCreateSchema = z
+  .object({
+    sourceNoteId: z.uuid(),
+    targetNoteId: z.uuid(),
+  })
+  .refine((value) => value.sourceNoteId !== value.targetNoteId, {
+    message: "Cannot link a note to itself",
+  });
+
+export const noteLinkDeleteSchema = z.object({
+  sourceNoteId: z.uuid(),
+  targetNoteId: z.uuid(),
+});

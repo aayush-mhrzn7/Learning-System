@@ -15,6 +15,13 @@
       "when": 1793812545303,
       "tag": "0001_silly_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793815800000,
+      "tag": "0002_note_links",
+      "breakpoints": true
     }
   ]
 }
