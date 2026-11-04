@@ -58,7 +58,7 @@ export function InlineChat({ editor }: { editor: Editor }) {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "j") {
         return;
       }
       const { empty } = editor.state.selection;
@@ -102,7 +102,7 @@ export function InlineChat({ editor }: { editor: Editor }) {
           <MessageSquarePlus size={13} className="text-[#aaa]" />
           Inline chat
           <kbd className="ml-1 rounded border border-[#333] px-1 py-px text-[9px] text-[#777]">
-            ⌘K
+            ⌘J
           </kbd>
         </button>
       ) : (
