@@ -345,19 +345,19 @@ export function VisualizeNote({
                         ) : null}
                         {turn.sampleInput || turn.sampleOutput ? (
                           <div className="grid gap-2 rounded-lg border border-[#222] bg-[#0c0c0c] p-3 text-[13px] leading-5 sm:grid-cols-2">
-                            <div>
+                            <div className="min-w-0">
                               <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
                                 Sample input
                               </p>
-                              <p className="whitespace-pre-wrap text-[#ccc]">
+                              <p className="break-all whitespace-pre-wrap text-[#ccc]">
                                 {turn.sampleInput || "—"}
                               </p>
                             </div>
-                            <div>
+                            <div className="min-w-0">
                               <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
                                 Sample output
                               </p>
-                              <p className="whitespace-pre-wrap text-[#ccc]">
+                              <p className="break-all whitespace-pre-wrap text-[#ccc]">
                                 {turn.sampleOutput || "—"}
                               </p>
                             </div>
