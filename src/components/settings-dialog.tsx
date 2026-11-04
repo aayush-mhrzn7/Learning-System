@@ -2,93 +2,47 @@
 
 import { Bot } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PROVIDER_DEFAULTS, type ProviderId } from "@/lib/providers";
 import { cn } from "@/lib/utils";
 
-type ProviderId = "gpt" | "openrouter";
-
-type ProviderConfig = {
+type ProviderView = {
   enabled: boolean;
-  apiKey: string;
   model: string;
   baseUrl: string;
+  apiKeyConfigured: boolean;
 };
 
 type SettingsState = {
   activeProvider: ProviderId;
-  providers: Record<ProviderId, ProviderConfig>;
+  providers: Record<ProviderId, ProviderView>;
 };
 
-const STORAGE_KEY = "learning-provider-settings";
-
-const defaults: SettingsState = {
+const emptySettings: SettingsState = {
   activeProvider: "gpt",
   providers: {
     gpt: {
       enabled: true,
-      apiKey: "",
-      model: "gpt-5.6-luna",
-      baseUrl: "https://api.openai.com/v1",
+      model: PROVIDER_DEFAULTS.gpt.model,
+      baseUrl: PROVIDER_DEFAULTS.gpt.baseUrl,
+      apiKeyConfigured: false,
     },
     openrouter: {
       enabled: false,
-      apiKey: "",
-      model: "openai/gpt-4.1-mini",
-      baseUrl: "https://openrouter.ai/api/v1",
+      model: PROVIDER_DEFAULTS.openrouter.model,
+      baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl,
+      apiKeyConfigured: false,
     },
   },
 };
-
-function withExclusiveProvider(
-  state: SettingsState,
-  activeProvider: ProviderId,
-): SettingsState {
-  const providers = { ...state.providers };
-  for (const id of Object.keys(providers) as ProviderId[]) {
-    providers[id] = {
-      ...providers[id],
-      enabled: id === activeProvider,
-    };
-  }
-  return { activeProvider, providers };
-}
-
-function loadSettings(): SettingsState {
-  if (typeof window === "undefined") return defaults;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as Partial<SettingsState>;
-    const merged: SettingsState = {
-      activeProvider: parsed.activeProvider ?? defaults.activeProvider,
-      providers: {
-        gpt: { ...defaults.providers.gpt, ...parsed.providers?.gpt },
-        openrouter: {
-          ...defaults.providers.openrouter,
-          ...parsed.providers?.openrouter,
-        },
-      },
-    };
-    const enabledIds = (Object.keys(merged.providers) as ProviderId[]).filter(
-      (id) => merged.providers[id].enabled,
-    );
-    const active =
-      enabledIds.length === 1
-        ? enabledIds[0]!
-        : merged.providers[merged.activeProvider]?.enabled
-          ? merged.activeProvider
-          : enabledIds[0] ?? merged.activeProvider;
-    return withExclusiveProvider(merged, active);
-  } catch {
-    return defaults;
-  }
-}
 
 const providerMeta: Record<
   ProviderId,
@@ -128,7 +82,9 @@ function ProviderIconShell({
       className={cn(
         "grid shrink-0 place-items-center overflow-hidden rounded-md",
         size === "sm" ? "size-7" : "size-9 rounded-lg",
-        provider.iconShell === "light" ? "bg-white" : "bg-zinc-900 ring-1 ring-white/10",
+        provider.iconShell === "light"
+          ? "bg-white"
+          : "bg-zinc-900 ring-1 ring-white/10",
       )}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -150,10 +106,12 @@ function ProviderIconShell({
 function Switch({
   checked,
   onCheckedChange,
+  disabled,
   size = "sm",
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
   size?: "sm" | "md";
 }) {
   return (
@@ -161,9 +119,10 @@ function Switch({
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "relative shrink-0 rounded-full transition-colors",
+        "relative shrink-0 rounded-full transition-colors disabled:opacity-40",
         size === "sm" ? "h-4 w-7" : "h-5 w-9",
         checked ? "bg-blue-500" : "bg-zinc-700",
       )}
@@ -193,34 +152,108 @@ export function SettingsDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const [settings, setSettings] = useState<SettingsState>(defaults);
+  const [settings, setSettings] = useState<SettingsState>(emptySettings);
   const [selected, setSelected] = useState<ProviderId>("gpt");
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [modelDraft, setModelDraft] = useState(PROVIDER_DEFAULTS.gpt.model);
+  const [baseUrlDraft, setBaseUrlDraft] = useState(
+    PROVIDER_DEFAULTS.gpt.baseUrl,
+  );
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const next = loadSettings();
-    setSettings(next);
-    setSelected(next.activeProvider);
+    // Drop the old client-side BYOK store; keys live encrypted in Postgres now.
+    localStorage.removeItem("learning-provider-settings");
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      try {
+        const response = await fetch("/api/settings/providers", {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("Failed to load settings");
+        const data = (await response.json()) as SettingsState;
+        if (cancelled) return;
+        setSettings(data);
+        setSelected(data.activeProvider);
+        const active = data.providers[data.activeProvider];
+        setModelDraft(active.model);
+        setBaseUrlDraft(active.baseUrl);
+        setApiKeyDraft("");
+      } catch {
+        if (!cancelled) toast.error("Could not load provider settings");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
-  function persist(next: SettingsState) {
-    setSettings(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  useEffect(() => {
+    const provider = settings.providers[selected];
+    setModelDraft(provider.model);
+    setBaseUrlDraft(provider.baseUrl);
+    setApiKeyDraft("");
+  }, [selected, settings.providers]);
+
+  async function saveProvider(options?: { makeActive?: boolean }) {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/settings/providers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: selected,
+          model: modelDraft,
+          baseUrl: baseUrlDraft,
+          ...(apiKeyDraft.trim() ? { apiKey: apiKeyDraft.trim() } : {}),
+          makeActive: options?.makeActive,
+        }),
+      });
+      const data = (await response.json()) as SettingsState & { error?: string };
+      if (!response.ok) {
+        toast.error(data.error ?? "Could not save provider");
+        return;
+      }
+      setSettings(data);
+      setApiKeyDraft("");
+      toast.success("Provider saved");
+    } catch {
+      toast.error("Could not save provider");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function updateProvider(id: ProviderId, patch: Partial<ProviderConfig>) {
-    persist({
-      ...settings,
-      providers: {
-        ...settings.providers,
-        [id]: { ...settings.providers[id], ...patch },
-      },
-    });
-  }
-
-  function enableOnly(id: ProviderId) {
-    persist(withExclusiveProvider(settings, id));
-    setSelected(id);
+  async function enableOnly(id: ProviderId) {
+    if (!settings.providers[id].apiKeyConfigured) {
+      setSelected(id);
+      toast.error("Save an API key for this provider first");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/settings/providers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeProvider: id }),
+      });
+      const data = (await response.json()) as SettingsState & { error?: string };
+      if (!response.ok) {
+        toast.error(data.error ?? "Could not switch provider");
+        return;
+      }
+      setSettings(data);
+      setSelected(id);
+    } catch {
+      toast.error("Could not switch provider");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const provider = settings.providers[selected];
@@ -287,16 +320,19 @@ export function SettingsDialog({
                             {item.name}
                           </span>
                           <span className="block truncate text-[11px] text-zinc-500">
-                            {enabled ? "Enabled" : "Disabled"}
+                            {settings.providers[id].apiKeyConfigured
+                              ? enabled
+                                ? "Active"
+                                : "Configured"
+                              : "Not configured"}
                           </span>
                         </span>
                       </button>
                       <Switch
                         checked={enabled}
+                        disabled={saving || loading}
                         onCheckedChange={(checked) => {
-                          // Toggle on → this becomes the only enabled provider.
-                          // Toggle off is ignored so one provider always stays on.
-                          if (checked) enableOnly(id);
+                          if (checked) void enableOnly(id);
                         }}
                       />
                     </div>
@@ -306,95 +342,120 @@ export function SettingsDialog({
             </div>
 
             <div className="min-w-0 flex-1 overflow-y-auto p-5">
-              <div className="mb-6 flex items-center gap-3">
-                <ProviderIconShell provider={meta} size="lg" />
-                <div>
-                  <h2 className="text-sm font-medium tracking-tight text-zinc-50">
-                    {meta.name}
-                  </h2>
-                  <p className="text-xs text-zinc-500">{meta.blurb}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-5">
-                <Field
-                  label="Display name"
-                  description="Label shown in the provider list."
-                >
-                  <Input
-                    value={meta.name}
-                    readOnly
-                    className={fieldInputClass}
-                  />
-                </Field>
-
-                <Field
-                  label="API key"
-                  description="Used only for your AI calls. Stored locally for now."
-                >
-                  <Input
-                    type="password"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={provider.apiKey}
-                    onChange={(event) =>
-                      updateProvider(selected, { apiKey: event.target.value })
-                    }
-                    placeholder={selected === "gpt" ? "sk-…" : "sk-or-…"}
-                    className={fieldInputClass}
-                  />
-                </Field>
-
-                <Field
-                  label="Default model"
-                  description="Model id used for fact-check and gap analysis."
-                >
-                  <Input
-                    value={provider.model}
-                    onChange={(event) =>
-                      updateProvider(selected, { model: event.target.value })
-                    }
-                    placeholder="model id"
-                    spellCheck={false}
-                    className={fieldInputClass}
-                  />
-                </Field>
-
-                <Field
-                  label="Base URL"
-                  description="API endpoint for this provider."
-                >
-                  <Input
-                    value={provider.baseUrl}
-                    onChange={(event) =>
-                      updateProvider(selected, {
-                        baseUrl: event.target.value,
-                      })
-                    }
-                    placeholder="https://"
-                    spellCheck={false}
-                    className={fieldInputClass}
-                  />
-                </Field>
-
-                <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-5">
-                  <div>
-                    <p className="text-xs text-zinc-100">
-                      Use as active provider
-                    </p>
-                    <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
-                      Turning this on disables the other provider automatically.
-                    </p>
+              {loading ? (
+                <p className="text-xs text-zinc-500">Loading…</p>
+              ) : (
+                <>
+                  <div className="mb-6 flex items-center gap-3">
+                    <ProviderIconShell provider={meta} size="lg" />
+                    <div>
+                      <h2 className="text-sm font-medium tracking-tight text-zinc-50">
+                        {meta.name}
+                      </h2>
+                      <p className="text-xs text-zinc-500">{meta.blurb}</p>
+                    </div>
                   </div>
-                  <Switch
-                    size="md"
-                    checked={settings.activeProvider === selected}
-                    onCheckedChange={(checked) => {
-                      if (checked) enableOnly(selected);
-                    }}
-                  />
-                </div>
-              </div>
+
+                  <div className="flex flex-col gap-5">
+                    <Field
+                      label="Display name"
+                      description="Label shown in the provider list."
+                    >
+                      <Input
+                        value={meta.name}
+                        readOnly
+                        className={fieldInputClass}
+                      />
+                    </Field>
+
+                    <Field
+                      label="API key"
+                      description={
+                        provider.apiKeyConfigured
+                          ? "Encrypted in the database. Leave blank to keep the current key."
+                          : "Encrypted in the database. Never stored in the browser."
+                      }
+                    >
+                      <Input
+                        type="password"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={apiKeyDraft}
+                        onChange={(event) => setApiKeyDraft(event.target.value)}
+                        placeholder={
+                          provider.apiKeyConfigured
+                            ? "•••••••• (unchanged)"
+                            : selected === "gpt"
+                              ? "sk-…"
+                              : "sk-or-…"
+                        }
+                        className={fieldInputClass}
+                      />
+                    </Field>
+
+                    <Field
+                      label="Default model"
+                      description="Model id used for fact-check and gap analysis."
+                    >
+                      <Input
+                        value={modelDraft}
+                        onChange={(event) => setModelDraft(event.target.value)}
+                        placeholder="model id"
+                        spellCheck={false}
+                        className={fieldInputClass}
+                      />
+                    </Field>
+
+                    <Field
+                      label="Base URL"
+                      description="API endpoint for this provider."
+                    >
+                      <Input
+                        value={baseUrlDraft}
+                        onChange={(event) => setBaseUrlDraft(event.target.value)}
+                        placeholder="https://"
+                        spellCheck={false}
+                        className={fieldInputClass}
+                      />
+                    </Field>
+
+                    <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-5">
+                      <div>
+                        <p className="text-xs text-zinc-100">
+                          Use as active provider
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
+                          Turning this on disables the other provider
+                          automatically.
+                        </p>
+                      </div>
+                      <Switch
+                        size="md"
+                        checked={settings.activeProvider === selected}
+                        disabled={saving || loading}
+                        onCheckedChange={(checked) => {
+                          if (checked) void enableOnly(selected);
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={saving}
+                        onClick={() =>
+                          void saveProvider({
+                            makeActive: settings.activeProvider === selected,
+                          })
+                        }
+                      >
+                        {saving ? "Saving…" : "Save provider"}
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

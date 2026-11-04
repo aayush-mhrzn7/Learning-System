@@ -4,6 +4,7 @@ import { claims, notes } from "@/db/schema";
 import { extractClaims, judgeClaim } from "@/lib/ai";
 import { requireUserId } from "@/lib/auth";
 import { documentToText } from "@/lib/editor-text";
+import { resolveActiveProviderCredentials } from "@/lib/provider-credentials";
 import { idSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
@@ -15,6 +16,19 @@ export async function POST(_request: Request, context: Context) {
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid note" }, { status: 400 });
+  }
+
+  let credentials;
+  try {
+    credentials = await resolveActiveProviderCredentials(userId);
+  } catch (err) {
+    return Response.json(
+      {
+        error:
+          err instanceof Error ? err.message : "AI provider is not configured",
+      },
+      { status: 400 },
+    );
   }
 
   const [note] = await db
@@ -41,7 +55,7 @@ export async function POST(_request: Request, context: Context) {
           .where(and(eq(notes.id, id), eq(notes.userId, userId)));
 
         const noteText = documentToText(note.content, { skipCode: true });
-        const extracted = await extractClaims(noteText);
+        const extracted = await extractClaims(credentials, noteText);
         await db.delete(claims).where(eq(claims.noteId, id));
         send({ type: "start", total: extracted.length });
 
@@ -49,7 +63,7 @@ export async function POST(_request: Request, context: Context) {
         await Promise.all(
           extracted.map(async ({ text }) => {
             try {
-              const verdict = await judgeClaim(text);
+              const verdict = await judgeClaim(credentials, text);
               const [claim] = await db
                 .insert(claims)
                 .values({

@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import { z } from "zod";
-
-const MODEL = process.env.OPENAI_MODEL?.trim() || "gpt-5.6-luna";
+import type { ResolvedProviderCredentials } from "@/lib/providers";
 
 const extractedClaimsSchema = z.object({
   claims: z.array(
@@ -26,29 +25,36 @@ const gapsSchema = z.object({
   gaps: z.array(z.string().min(1)).max(5),
 });
 
-let client: OpenAI | undefined;
-
-function getClient() {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not set");
-  }
-  client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return client;
+function createClient(credentials: ResolvedProviderCredentials) {
+  return new OpenAI({
+    apiKey: credentials.apiKey,
+    baseURL: credentials.baseUrl,
+    defaultHeaders:
+      credentials.provider === "openrouter"
+        ? {
+            "HTTP-Referer": "https://learning-system.local",
+            "X-Title": "Learning System",
+          }
+        : undefined,
+  });
 }
 
 async function structuredResponse<T>(
+  credentials: ResolvedProviderCredentials,
   name: string,
   schema: Record<string, unknown>,
   instructions: string,
   input: string,
   webSearch = false,
 ) {
-  const response = await getClient().responses.create({
-    model: MODEL,
+  const useWebSearch = webSearch && credentials.supportsWebSearch;
+  const client = createClient(credentials);
+  const response = await client.responses.create({
+    model: credentials.model,
     instructions,
     input,
     store: false,
-    ...(webSearch
+    ...(useWebSearch
       ? {
           tools: [{ type: "web_search" as const }],
           tool_choice: "required" as const,
@@ -71,8 +77,12 @@ async function structuredResponse<T>(
   return JSON.parse(response.output_text) as T;
 }
 
-export async function extractClaims(noteText: string) {
+export async function extractClaims(
+  credentials: ResolvedProviderCredentials,
+  noteText: string,
+) {
   const data = await structuredResponse<unknown>(
+    credentials,
     "extracted_claims",
     {
       type: "object",
@@ -101,8 +111,12 @@ export async function extractClaims(noteText: string) {
   return extractedClaimsSchema.parse(data).claims;
 }
 
-export async function judgeClaim(claim: string) {
+export async function judgeClaim(
+  credentials: ResolvedProviderCredentials,
+  claim: string,
+) {
   const data = await structuredResponse<unknown>(
+    credentials,
     "claim_verdict",
     {
       type: "object",
@@ -128,21 +142,33 @@ export async function judgeClaim(claim: string) {
       required: ["verdict", "reason", "sources"],
       additionalProperties: false,
     },
-    [
-      "Fact-check this claim using web search.",
-      "Use correct only when reliable sources support it.",
-      "Use incorrect when reliable sources contradict it.",
-      "Use unsure when evidence is ambiguous or insufficient.",
-      "Explain briefly and include direct source URLs.",
-    ].join(" "),
+    credentials.supportsWebSearch
+      ? [
+          "Fact-check this claim using web search.",
+          "Use correct only when reliable sources support it.",
+          "Use incorrect when reliable sources contradict it.",
+          "Use unsure when evidence is ambiguous or insufficient.",
+          "Explain briefly and include direct source URLs.",
+        ].join(" ")
+      : [
+          "Fact-check this claim using your knowledge.",
+          "Use correct only when you are confident it is well-supported.",
+          "Use incorrect when it conflicts with established knowledge.",
+          "Use unsure when evidence is ambiguous or insufficient.",
+          "Explain briefly. Include source URLs only when you know real ones; otherwise return an empty sources list.",
+        ].join(" "),
     claim,
     true,
   );
   return verdictSchema.parse(data);
 }
 
-export async function findMissingTopics(noteText: string) {
+export async function findMissingTopics(
+  credentials: ResolvedProviderCredentials,
+  noteText: string,
+) {
   const data = await structuredResponse<unknown>(
+    credentials,
     "missing_topics",
     {
       type: "object",

@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -27,6 +28,7 @@ export const claimVerdict = pgEnum("claim_verdict", [
   "incorrect",
   "unsure",
 ]);
+export const aiProvider = pgEnum("ai_provider", ["gpt", "openrouter"]);
 
 export const users = pgTable(
   "users",
@@ -157,8 +159,38 @@ export const checklistItems = pgTable(
   (table) => [index("checklist_note_idx").on(table.noteId)],
 );
 
+export const providerCredentials = pgTable(
+  "provider_credentials",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: aiProvider("provider").notNull(),
+    model: text("model").notNull(),
+    baseUrl: text("base_url").notNull(),
+    /** AES-GCM payload from encryptSecret — never return to the client. */
+    apiKeyCiphertext: text("api_key_ciphertext").notNull(),
+    isActive: boolean("is_active").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("provider_credentials_user_provider_idx").on(
+      table.userId,
+      table.provider,
+    ),
+    index("provider_credentials_user_idx").on(table.userId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Directory = typeof directories.$inferSelect;
 export type Note = typeof notes.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
 export type ChecklistItem = typeof checklistItems.$inferSelect;
+export type ProviderCredential = typeof providerCredentials.$inferSelect;

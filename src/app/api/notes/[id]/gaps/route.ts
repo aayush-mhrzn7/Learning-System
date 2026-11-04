@@ -4,6 +4,7 @@ import { checklistItems, notes } from "@/db/schema";
 import { findMissingTopics } from "@/lib/ai";
 import { requireUserId } from "@/lib/auth";
 import { documentToText } from "@/lib/editor-text";
+import { resolveActiveProviderCredentials } from "@/lib/provider-credentials";
 import { idSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
@@ -15,6 +16,19 @@ export async function POST(_request: Request, context: Context) {
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid note" }, { status: 400 });
+  }
+
+  let credentials;
+  try {
+    credentials = await resolveActiveProviderCredentials(userId);
+  } catch (err) {
+    return Response.json(
+      {
+        error:
+          err instanceof Error ? err.message : "AI provider is not configured",
+      },
+      { status: 400 },
+    );
   }
 
   const [note] = await db
@@ -43,7 +57,7 @@ export async function POST(_request: Request, context: Context) {
   }
 
   const known = new Set(existing.map((item) => item.text.trim().toLowerCase()));
-  const analysis = await findMissingTopics(noteText);
+  const analysis = await findMissingTopics(credentials, noteText);
 
   if (!analysis.eligible) {
     return Response.json({

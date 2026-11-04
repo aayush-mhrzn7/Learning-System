@@ -20,9 +20,12 @@ Open [http://localhost:3000](http://localhost:3000).
 ```dotenv
 DATABASE_URL=postgresql://...
 AUTH_SECRET=a-long-random-string
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5.6-luna
+CREDENTIALS_ENCRYPTION_KEY= # openssl rand -base64 32
 ```
+
+Provider API keys and models are configured only in **Settings → Providers**
+(BYOK). They are encrypted with `CREDENTIALS_ENCRYPTION_KEY` and stored per
+user in Postgres — there is no env-based OpenAI fallback.
 
 Create an account at `/signup`, or seed an owner and attach existing rows:
 
