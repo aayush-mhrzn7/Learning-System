@@ -22,7 +22,26 @@ export type ClaimSource = {
   url: string;
 };
 
+export type VisualizeDiagram = {
+  nodes: { id: string; label: string }[];
+  edges: { source: string; target: string; label?: string }[];
+};
+
+export type VisualizeMessage = {
+  role: "user" | "assistant";
+  content: string;
+  at: string;
+  /** Present on accepted assistant turns — each question keeps its own diagram. */
+  diagram?: VisualizeDiagram | null;
+  explanation?: string;
+};
+
+export type VisualizeState = {
+  messages: VisualizeMessage[];
+};
+
 export const noteStatus = pgEnum("note_status", ["draft", "published"]);
+export const noteKind = pgEnum("note_kind", ["writing", "visualize"]);
 export const claimVerdict = pgEnum("claim_verdict", [
   "correct",
   "incorrect",
@@ -86,11 +105,13 @@ export const notes = pgTable(
       .notNull()
       .references(() => directories.id, { onDelete: "cascade" }),
     title: text("title").notNull().default("Untitled"),
+    kind: noteKind("kind").notNull().default("writing"),
     content: jsonb("content")
       .$type<EditorDocument>()
       .notNull()
       .default({ type: "doc", content: [{ type: "paragraph" }] }),
     plainText: text("plain_text").notNull().default(""),
+    visualize: jsonb("visualize").$type<VisualizeState | null>().default(null),
     status: noteStatus("status").notNull().default("draft"),
     editedSincePublish: boolean("edited_since_publish")
       .notNull()

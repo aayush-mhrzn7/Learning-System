@@ -6,6 +6,7 @@ import { NoteEditor } from "@/components/note-editor";
 import { SearchDialog } from "@/components/search-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { Sidebar } from "@/components/sidebar";
+import { VisualizeNote } from "@/components/visualize-note";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -111,13 +112,8 @@ export function Workspace() {
     function syncViewport() {
       const mobile = mq.matches;
       setIsMobile(mobile);
-      if (mobile) {
-        setSidebarCollapsed(true);
-        return;
-      }
-      setSidebarCollapsed(
-        localStorage.getItem("learning-sidebar-collapsed") === "true",
-      );
+      // Desktop sidebar stays open; only mobile can collapse it.
+      setSidebarCollapsed(mobile);
     }
     syncViewport();
     mq.addEventListener("change", syncViewport);
@@ -135,14 +131,9 @@ export function Workspace() {
         setSettingsOpen(true);
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
+        if (!isMobileViewport()) return;
         event.preventDefault();
-        setSidebarCollapsed((current) => {
-          const next = !current;
-          if (!isMobileViewport()) {
-            localStorage.setItem("learning-sidebar-collapsed", String(next));
-          }
-          return next;
-        });
+        setSidebarCollapsed((current) => !current);
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
@@ -155,17 +146,12 @@ export function Workspace() {
   }, []);
 
   function collapseSidebar() {
+    if (!isMobileViewport()) return;
     setSidebarCollapsed(true);
-    if (!isMobileViewport()) {
-      localStorage.setItem("learning-sidebar-collapsed", "true");
-    }
   }
 
   function openSidebar() {
     setSidebarCollapsed(false);
-    if (!isMobileViewport()) {
-      localStorage.setItem("learning-sidebar-collapsed", "false");
-    }
   }
 
   async function createFirstDirectory() {
@@ -247,14 +233,25 @@ export function Workspace() {
       </div>
 
       {selectedNoteId ? (
-        <NoteEditor
-          key={selectedNoteId}
-          noteId={selectedNoteId}
-          sidebarCollapsed={sidebarCollapsed}
-          onOpenSidebar={openSidebar}
-          onTreeChanged={loadTree}
-          onTitleChange={onNoteTitleChange}
-        />
+        tree.notes.find((note) => note.id === selectedNoteId)?.kind ===
+        "visualize" ? (
+          <VisualizeNote
+            key={selectedNoteId}
+            noteId={selectedNoteId}
+            sidebarCollapsed={sidebarCollapsed}
+            onOpenSidebar={openSidebar}
+            onTitleChange={onNoteTitleChange}
+          />
+        ) : (
+          <NoteEditor
+            key={selectedNoteId}
+            noteId={selectedNoteId}
+            sidebarCollapsed={sidebarCollapsed}
+            onOpenSidebar={openSidebar}
+            onTreeChanged={loadTree}
+            onTitleChange={onNoteTitleChange}
+          />
+        )
       ) : (
         <main className="relative grid min-w-0 flex-1 place-items-center px-6">
           {sidebarCollapsed ? (

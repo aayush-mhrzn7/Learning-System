@@ -7,9 +7,15 @@ export const directoryCreateSchema = z.object({
   parentId: z.uuid().nullable().optional(),
 });
 
-export const directoryUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(120),
-});
+export const directoryUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    parentId: z.uuid().nullable().optional(),
+  })
+  .refine(
+    (value) => value.name !== undefined || value.parentId !== undefined,
+    { message: "Nothing to update" },
+  );
 
 export const directoryDeleteSchema = z.object({
   confirmation: z.string().trim().min(1, "Type the directory name to confirm"),
@@ -30,6 +36,7 @@ export function directoryDeleteMatchSchema(expectedName: string) {
 export const noteCreateSchema = z.object({
   directoryId: z.uuid(),
   title: z.string().trim().min(1).max(200).default("Untitled"),
+  kind: z.enum(["writing", "visualize"]).default("writing"),
 });
 
 export const editorDocumentSchema = z.object({
@@ -40,6 +47,7 @@ export const editorDocumentSchema = z.object({
 export const noteUpdateSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
+    directoryId: z.uuid().optional(),
     content: editorDocumentSchema.optional(),
     plainText: z.string().max(500_000).optional(),
   })

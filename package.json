@@ -27,6 +27,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.5.2",
+    "d3": "^7.9.2",
     "drizzle-orm": "^0.45.4",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.67.0",
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

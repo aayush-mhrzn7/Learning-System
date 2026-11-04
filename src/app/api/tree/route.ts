@@ -20,6 +20,7 @@ export async function GET() {
         id: notes.id,
         directoryId: notes.directoryId,
         title: notes.title,
+        kind: notes.kind,
         status: notes.status,
         updatedAt: notes.updatedAt,
       })

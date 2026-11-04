@@ -50,9 +50,77 @@ export async function PATCH(request: Request, context: Context) {
     return Response.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  const [existing] = await db
+    .select({ id: directories.id })
+    .from(directories)
+    .where(
+      and(
+        eq(directories.id, id),
+        eq(directories.userId, userId),
+        isNull(directories.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!existing) {
+    return Response.json({ error: "Directory not found" }, { status: 404 });
+  }
+
+  if (body.data.parentId !== undefined && body.data.parentId !== null) {
+    if (body.data.parentId === id) {
+      return Response.json(
+        { error: "Cannot move a directory into itself" },
+        { status: 400 },
+      );
+    }
+
+    const [parent] = await db
+      .select({ id: directories.id, parentId: directories.parentId })
+      .from(directories)
+      .where(
+        and(
+          eq(directories.id, body.data.parentId),
+          eq(directories.userId, userId),
+          isNull(directories.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!parent) {
+      return Response.json({ error: "Parent not found" }, { status: 404 });
+    }
+
+    // Walk up from the new parent — reject if we hit the moved directory.
+    let cursor: string | null = parent.parentId;
+    while (cursor) {
+      if (cursor === id) {
+        return Response.json(
+          { error: "Cannot move a directory into its descendant" },
+          { status: 400 },
+        );
+      }
+      const [ancestor] = await db
+        .select({ parentId: directories.parentId })
+        .from(directories)
+        .where(
+          and(
+            eq(directories.id, cursor),
+            eq(directories.userId, userId),
+            isNull(directories.deletedAt),
+          ),
+        )
+        .limit(1);
+      cursor = ancestor?.parentId ?? null;
+    }
+  }
+
   const [directory] = await db
     .update(directories)
-    .set({ name: body.data.name, updatedAt: new Date() })
+    .set({
+      ...(body.data.name !== undefined ? { name: body.data.name } : {}),
+      ...(body.data.parentId !== undefined
+        ? { parentId: body.data.parentId }
+        : {}),
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(directories.id, id),

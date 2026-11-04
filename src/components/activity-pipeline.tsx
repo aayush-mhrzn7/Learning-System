@@ -57,7 +57,10 @@ function emptyStep(id: string, label: string): PipelineStep {
   return { id, label, status: "pending", logs: [] };
 }
 
-export function createPipelineRun(kind: PipelineKind): PipelineRun {
+export function createPipelineRun(
+  kind: PipelineKind,
+  options?: { skipFactCheck?: boolean },
+): PipelineRun {
   const steps: PipelineStep[] = [emptyStep("save", "Save note")];
   if (kind !== "fact-check") {
     steps.push(
@@ -67,12 +70,14 @@ export function createPipelineRun(kind: PipelineKind): PipelineRun {
       ),
     );
   }
-  steps.push(
-    emptyStep("extract", "Extract claims"),
-    emptyStep("score", "Score claims"),
-    emptyStep("web", "Web fact-check"),
-    emptyStep("complete", "Complete"),
-  );
+  if (!options?.skipFactCheck) {
+    steps.push(
+      emptyStep("extract", "Extract claims"),
+      emptyStep("score", "Score claims"),
+      emptyStep("web", "Web fact-check"),
+    );
+  }
+  steps.push(emptyStep("complete", "Complete"));
   return {
     id: crypto.randomUUID(),
     kind,

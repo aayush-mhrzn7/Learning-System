@@ -58,6 +58,8 @@ export async function POST(request: Request) {
     .values({
       ...parsed.data,
       userId,
+      visualize:
+        parsed.data.kind === "visualize" ? { messages: [] } : null,
     })
     .returning();
 

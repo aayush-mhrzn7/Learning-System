@@ -33,6 +33,14 @@ import { EditorMinimap } from "@/components/editor-minimap";
 import { FormattingToolbar } from "@/components/formatting-toolbar";
 import { InlineChat } from "@/components/inline-chat";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { documentToText } from "@/lib/editor-text";
 import {
   MINIMAP_CHANGED_EVENT,
@@ -76,6 +84,7 @@ export function NoteEditor({
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [pipelineRun, setPipelineRun] = useState<PipelineRun | null>(null);
   const [pipelineBusy, setPipelineBusy] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
   // Default reading mode (mobile-first); desktop flips to edit after mount.
@@ -312,17 +321,21 @@ export function NoteEditor({
     });
   }
 
-  async function runPipeline(kind: PipelineKind) {
+  async function runPipeline(
+    kind: PipelineKind,
+    options?: { skipFactCheck?: boolean },
+  ) {
     if (pipelineBusy) return;
 
+    const skipFactCheck = Boolean(options?.skipFactCheck);
     const gen = pipelineGenRef.current + 1;
     pipelineGenRef.current = gen;
-    const run = createPipelineRun(kind);
+    const run = createPipelineRun(kind, { skipFactCheck });
     pipelineStepRef.current = "save";
     setPipelineRun(run);
     setPipelineOpen(true);
     setPipelineBusy(true);
-    applyClaims([]);
+    if (!skipFactCheck) applyClaims([]);
 
     try {
       updateStep(gen, "save", {
@@ -356,6 +369,19 @@ export function NoteEditor({
           status: "success",
           log: "✓ status set to published",
         });
+      }
+
+      if (skipFactCheck) {
+        updateStep(gen, "complete", {
+          status: "success",
+          log: "✓ published as-is · no fact-check",
+        });
+        if (gen === pipelineGenRef.current) {
+          setPipelineRun((current) =>
+            current ? { ...current, status: "success" } : current,
+          );
+        }
+        return;
       }
 
       updateStep(gen, "extract", {
@@ -740,7 +766,7 @@ export function NoteEditor({
               <span className="topbar-label">Fact-check</span>
             </button>
             <button
-              onClick={() => void runPipeline(publishKind)}
+              onClick={() => setPublishDialogOpen(true)}
               disabled={pipelineBusy}
               className="topbar-button solid"
               aria-label={
@@ -978,6 +1004,58 @@ export function NoteEditor({
         run={pipelineRun}
         onClose={() => setPipelineOpen(false)}
       />
+
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {payload.note.status === "published" ? "Re-publish" : "Publish"}?
+            </DialogTitle>
+            <DialogDescription>
+              Run the fact-checker, or save the note as published without
+              checking claims.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              type="button"
+              size="sm"
+              className="w-full"
+              disabled={pipelineBusy}
+              onClick={() => {
+                setPublishDialogOpen(false);
+                void runPipeline(publishKind);
+              }}
+            >
+              Run fact-check
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={pipelineBusy}
+              onClick={() => {
+                setPublishDialogOpen(false);
+                void runPipeline(publishKind, { skipFactCheck: true });
+              }}
+            >
+              {payload.note.status === "published"
+                ? "Re-publish as-is"
+                : "Publish as-is"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => setPublishDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

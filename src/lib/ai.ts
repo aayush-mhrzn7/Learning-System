@@ -612,6 +612,170 @@ const inlineReplySchema = z.object({
   answer: z.string().min(1).max(4000),
 });
 
+const visualizeTurnSchema = z.object({
+  accepted: z.boolean(),
+  title: z.string().max(80).nullable(),
+  reply: z.string().min(1).max(600),
+  explanation: z.string().max(400),
+  diagram: z
+    .object({
+      nodes: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(40),
+            label: z.string().min(1).max(48),
+          }),
+        )
+        .max(8),
+      edges: z
+        .array(
+          z.object({
+            source: z.string().min(1).max(40),
+            target: z.string().min(1).max(40),
+            label: z.string().max(40),
+          }),
+        )
+        .max(12)
+        .transform((edges) =>
+          edges.map((edge) => {
+            const label = edge.label.trim();
+            return label
+              ? { source: edge.source, target: edge.target, label }
+              : { source: edge.source, target: edge.target };
+          }),
+        ),
+    })
+    .nullable(),
+});
+
+export type VisualizeTurnResult = z.infer<typeof visualizeTurnSchema>;
+
+/** Tiny architecture/algorithm diagram turn — rejects general chat. */
+export async function answerVisualizeTurn(
+  credentials: ResolvedProviderCredentials,
+  args: {
+    message: string;
+    history?: { role: "user" | "assistant"; content: string }[];
+    hasDiagram: boolean;
+  },
+): Promise<VisualizeTurnResult> {
+  const history = (args.history ?? []).slice(-8);
+  const packed = [
+    history.length
+      ? `PRIOR TURNS:\n${history
+          .map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`)
+          .join("\n\n")}`
+      : "",
+    "",
+    `HAS_EXISTING_DIAGRAM: ${args.hasDiagram ? "yes" : "no"}`,
+    "",
+    "USER:",
+    args.message.trim(),
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+
+  const data = await structuredResponse<unknown>(
+    credentials,
+    "visualize_turn",
+    {
+      type: "object",
+      properties: {
+        accepted: { type: "boolean" },
+        title: { type: ["string", "null"] },
+        reply: { type: "string" },
+        explanation: { type: "string" },
+        diagram: {
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                nodes: {
+                  type: "array",
+                  maxItems: 8,
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      label: { type: "string" },
+                    },
+                    required: ["id", "label"],
+                    additionalProperties: false,
+                  },
+                },
+                edges: {
+                  type: "array",
+                  maxItems: 12,
+                  items: {
+                    type: "object",
+                    properties: {
+                      source: { type: "string" },
+                      target: { type: "string" },
+                      label: { type: "string" },
+                    },
+                    required: ["source", "target", "label"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["nodes", "edges"],
+              additionalProperties: false,
+            },
+            { type: "null" },
+          ],
+        },
+      },
+      required: ["accepted", "title", "reply", "explanation", "diagram"],
+      additionalProperties: false,
+    },
+    [
+      "You only visualize software systems, architecture, algorithms, data flows, and similar diagrams.",
+      "Reject general chat, homework essays, coding help, writing, opinions, or anything that is not a visualize request.",
+      "When rejected: accepted=false, diagram=null, explanation=\"\", reply briefly clarifies this tool is only for visualizing software/architecture/algorithms and asks them to rephrase.",
+      "When accepted: accepted=true, return a MINIMAL diagram (prefer ≤6 nodes) and a short explanation (≤2 sentences).",
+      "Node ids must be short snake_case; edge source/target must match node ids; edge label is \"\" when unused.",
+      "Edges must follow pipeline direction (upstream → downstream) so the diagram can lay out top-to-bottom in order.",
+      "Each accepted question gets its own new diagram block (do not assume overwriting a single canvas).",
+      "Follow-ups should draw a fresh diagram for that request. Never invent URLs or research links. Never return executable code.",
+      "title: short note title on the first accepted turn; otherwise null.",
+    ].join(" "),
+    packed,
+    false,
+  );
+
+  const parsed = visualizeTurnSchema.parse(data);
+  if (!parsed.accepted) {
+    return {
+      ...parsed,
+      diagram: null,
+      explanation: "",
+      title: null,
+    };
+  }
+  if (!parsed.diagram || parsed.diagram.nodes.length === 0) {
+    return {
+      ...parsed,
+      accepted: false,
+      diagram: null,
+      explanation: "",
+      title: null,
+      reply:
+        "I can only draw software, architecture, and algorithm diagrams. Ask me to visualize something like that.",
+    };
+  }
+  // Drop edges that point at missing nodes — keeps D3 stable.
+  const ids = new Set(parsed.diagram.nodes.map((node) => node.id));
+  return {
+    ...parsed,
+    diagram: {
+      nodes: parsed.diagram.nodes.slice(0, 8),
+      edges: parsed.diagram.edges
+        .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
+        .slice(0, 12),
+    },
+  };
+}
+
 /** Tutor reply about a selected passage — no web search, no note rewrites. */
 export async function answerInlineSelection(
   credentials: ResolvedProviderCredentials,

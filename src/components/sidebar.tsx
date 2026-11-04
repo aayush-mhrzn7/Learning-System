@@ -13,6 +13,7 @@ import {
   Search,
   Settings,
   Trash2,
+  Waypoints,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -44,14 +45,42 @@ import { Input } from "@/components/ui/input";
 import { directoryDeleteMatchSchema } from "@/lib/schemas";
 import type {
   DirectoryItem,
+  NoteKind,
   NoteSummary,
   TreePayload,
 } from "@/lib/types";
 
-const SIDEBAR_WIDTH_KEY = "learning-sidebar-width";
-const SIDEBAR_MIN_WIDTH = 220;
-const SIDEBAR_MAX_WIDTH = 480;
-const SIDEBAR_DEFAULT_WIDTH = 288;
+const SIDEBAR_WIDTH_KEY = "learning-sidebar-width-v2";
+const SIDEBAR_MIN_WIDTH = 260;
+const SIDEBAR_MAX_WIDTH = 520;
+const SIDEBAR_DEFAULT_WIDTH = 340;
+const TREE_DRAG_MIME = "application/x-learning-tree-item";
+
+type TreeDragPayload =
+  | { kind: "note"; id: string }
+  | { kind: "directory"; id: string };
+
+function parseTreeDragPayload(raw: string): TreeDragPayload | null {
+  try {
+    const parsed = JSON.parse(raw) as TreeDragPayload;
+    if (
+      (parsed.kind === "note" || parsed.kind === "directory") &&
+      typeof parsed.id === "string"
+    ) {
+      return parsed;
+    }
+  } catch {
+    // ignore malformed payloads
+  }
+  return null;
+}
+
+function readTreeDrag(event: React.DragEvent): TreeDragPayload | null {
+  return (
+    parseTreeDragPayload(event.dataTransfer.getData(TREE_DRAG_MIME)) ??
+    parseTreeDragPayload(event.dataTransfer.getData("text/plain"))
+  );
+}
 
 function readSidebarWidth() {
   if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
@@ -86,6 +115,7 @@ type EditAction =
       directoryId: string;
       id?: string;
       value: string;
+      noteKind?: NoteKind;
     };
 
 type DeleteAction =
@@ -108,6 +138,10 @@ export function Sidebar(props: SidebarProps) {
     return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
   });
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [draggingItem, setDraggingItem] = useState<TreeDragPayload | null>(
+    null,
+  );
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -204,6 +238,70 @@ export function Sidebar(props: SidebarProps) {
       }
     }
     return ids;
+  }
+
+  function canDropOnDirectory(
+    drag: TreeDragPayload,
+    targetDirectoryId: string,
+  ) {
+    if (drag.kind === "note") {
+      const note = props.tree.notes.find((item) => item.id === drag.id);
+      return Boolean(note && note.directoryId !== targetDirectoryId);
+    }
+    if (drag.id === targetDirectoryId) return false;
+    const directory = props.tree.directories.find((item) => item.id === drag.id);
+    if (!directory || directory.parentId === targetDirectoryId) return false;
+    return !descendantDirectoryIds(drag.id).has(targetDirectoryId);
+  }
+
+  async function moveTreeItem(
+    drag: TreeDragPayload,
+    targetDirectoryId: string,
+  ) {
+    if (!canDropOnDirectory(drag, targetDirectoryId)) return;
+    const previous = props.tree;
+    toggleOpen(targetDirectoryId);
+
+    if (drag.kind === "note") {
+      props.onOptimisticTree((tree) => ({
+        ...tree,
+        notes: tree.notes.map((note) =>
+          note.id === drag.id
+            ? { ...note, directoryId: targetDirectoryId }
+            : note,
+        ),
+      }));
+      try {
+        const response = await fetch(`/api/notes/${drag.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ directoryId: targetDirectoryId }),
+        });
+        if (!response.ok) throw new Error();
+      } catch {
+        rollback(previous, "Could not move note");
+      }
+      return;
+    }
+
+    props.onOptimisticTree((tree) => ({
+      ...tree,
+      directories: tree.directories.map((directory) =>
+        directory.id === drag.id
+          ? { ...directory, parentId: targetDirectoryId }
+          : directory,
+      ),
+    }));
+    try {
+      const response = await fetch(`/api/directories/${drag.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentId: targetDirectoryId }),
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      rollback(previous, "Could not move directory");
+    }
   }
 
   async function confirmDelete(event: FormEvent<HTMLFormElement>) {
@@ -313,11 +411,13 @@ export function Sidebar(props: SidebarProps) {
       }
 
       if (editAction.kind === "note" && editAction.mode === "create") {
+        const noteKind = editAction.noteKind ?? "writing";
         const tempId = crypto.randomUUID();
         const optimistic: NoteSummary = {
           id: tempId,
           directoryId: editAction.directoryId,
           title: editAction.value.trim(),
+          kind: noteKind,
           status: "draft",
           updatedAt: new Date().toISOString(),
         };
@@ -333,6 +433,7 @@ export function Sidebar(props: SidebarProps) {
           body: JSON.stringify({
             directoryId: editAction.directoryId,
             title: editAction.value,
+            kind: noteKind,
           }),
         });
         if (!response.ok) throw new Error();
@@ -340,7 +441,16 @@ export function Sidebar(props: SidebarProps) {
         props.onOptimisticTree((tree) => ({
           ...tree,
           notes: tree.notes.map((item) =>
-            item.id === tempId ? note : item,
+            item.id === tempId
+              ? {
+                  id: note.id,
+                  directoryId: note.directoryId,
+                  title: note.title,
+                  kind: note.kind ?? noteKind,
+                  status: note.status,
+                  updatedAt: note.updatedAt,
+                }
+              : item,
           ),
         }));
         props.onOpenNote(note.id);
@@ -426,7 +536,10 @@ export function Sidebar(props: SidebarProps) {
     selectedDirectoryId,
   ]);
 
-  function startCreateNote(directoryId?: string | null) {
+  function startCreateNote(
+    directoryId?: string | null,
+    noteKind: NoteKind = "writing",
+  ) {
     const target = directoryId ?? currentDirectoryId;
     if (!target) {
       toast.error("Create a directory first");
@@ -442,7 +555,8 @@ export function Sidebar(props: SidebarProps) {
       kind: "note",
       mode: "create",
       directoryId: target,
-      value: "Untitled",
+      value: noteKind === "visualize" ? "Untitled visualize" : "Untitled",
+      noteKind,
     });
   }
 
@@ -560,13 +674,15 @@ export function Sidebar(props: SidebarProps) {
         <span className="text-xs font-medium uppercase tracking-[0.2em]">
           Learning
         </span>
-        <button
-          onClick={props.onCollapse}
-          className="icon-button"
-          aria-label="Collapse sidebar"
-        >
-          <PanelLeftClose size={16} />
-        </button>
+        {props.mobile ? (
+          <button
+            onClick={props.onCollapse}
+            className="icon-button"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        ) : null}
       </div>
 
       <button
@@ -598,12 +714,18 @@ export function Sidebar(props: SidebarProps) {
                   expanded={expanded}
                   selectedDirectoryId={selectedDirectoryId}
                   selectedNoteId={props.selectedNoteId}
+                  dropTargetId={dropTargetId}
+                  draggingItem={draggingItem}
                   onToggle={toggle}
+                  onEnsureExpanded={toggleOpen}
                   onSelectDirectory={setSelectedDirectoryId}
                   onCreateDirectory={(parentId) =>
                     startCreateDirectory(parentId)
                   }
                   onCreateNote={(directoryId) => startCreateNote(directoryId)}
+                  onCreateVisualizeNote={(directoryId) =>
+                    startCreateNote(directoryId, "visualize")
+                  }
                   onRenameDirectory={(directory) =>
                     setEditAction({
                       kind: "directory",
@@ -640,6 +762,14 @@ export function Sidebar(props: SidebarProps) {
                     setSelectedDirectoryId(null);
                     props.onOpenNote(id);
                   }}
+                  onDragItemStart={setDraggingItem}
+                  onDragItemEnd={() => {
+                    setDraggingItem(null);
+                    setDropTargetId(null);
+                  }}
+                  canDropOnDirectory={canDropOnDirectory}
+                  onDropTargetChange={setDropTargetId}
+                  onDropOnDirectory={moveTreeItem}
                 />
               ))
             ) : (
@@ -660,6 +790,12 @@ export function Sidebar(props: SidebarProps) {
             <kbd className="ml-auto hidden font-mono text-[10px] text-muted-foreground sm:inline">
               ⌃N
             </kbd>
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => startCreateNote(currentDirectoryId, "visualize")}
+          >
+            <Waypoints size={14} />
+            New visualize note
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => startCreateDirectory(selectedDirectoryId)}
@@ -729,11 +865,16 @@ export function Sidebar(props: SidebarProps) {
               <DialogTitle>
                 {editAction?.mode === "rename"
                   ? `Rename ${editAction.kind}`
-                  : `New ${editAction?.kind ?? "item"}`}
+                  : editAction?.kind === "note" &&
+                      editAction.noteKind === "visualize"
+                    ? "New visualize note"
+                    : `New ${editAction?.kind ?? "item"}`}
               </DialogTitle>
               <DialogDescription>
                 {editAction?.kind === "note"
-                  ? "Notes open immediately after they are created."
+                  ? editAction.noteKind === "visualize"
+                    ? "Opens a diagram prompt for software, architecture, and algorithms."
+                    : "Notes open immediately after they are created."
                   : "Directories can contain notes and other directories."}
               </DialogDescription>
             </DialogHeader>
@@ -854,20 +995,36 @@ type DirectoryNodeProps = {
   expanded: Set<string>;
   selectedDirectoryId: string | null;
   selectedNoteId: string | null;
+  dropTargetId: string | null;
+  draggingItem: TreeDragPayload | null;
   onToggle: (id: string) => void;
+  onEnsureExpanded: (id: string) => void;
   onSelectDirectory: (id: string) => void;
   onCreateDirectory: (parentId: string) => void;
   onCreateNote: (directoryId: string) => void;
+  onCreateVisualizeNote: (directoryId: string) => void;
   onRenameDirectory: (directory: DirectoryItem) => void;
   onRenameNote: (note: NoteSummary) => void;
   onDeleteDirectory: (directory: DirectoryItem) => void;
   onDeleteNote: (note: NoteSummary) => void;
   onOpenNote: (id: string) => void;
+  onDragItemStart: (item: TreeDragPayload) => void;
+  onDragItemEnd: () => void;
+  canDropOnDirectory: (
+    drag: TreeDragPayload,
+    targetDirectoryId: string,
+  ) => boolean;
+  onDropTargetChange: (id: string | null) => void;
+  onDropOnDirectory: (
+    drag: TreeDragPayload,
+    targetDirectoryId: string,
+  ) => void | Promise<void>;
 };
 
 function DirectoryNode(props: DirectoryNodeProps) {
   const open = props.expanded.has(props.directory.id);
   const selected = props.selectedDirectoryId === props.directory.id;
+  const isDropTarget = props.dropTargetId === props.directory.id;
   const children = props.directories
     .filter((item) => item.parentId === props.directory.id)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -875,15 +1032,67 @@ function DirectoryNode(props: DirectoryNodeProps) {
     .filter((note) => note.directoryId === props.directory.id)
     .sort((a, b) => a.title.localeCompare(b.title));
 
+  function startDrag(event: React.DragEvent, item: TreeDragPayload) {
+    props.onDragItemStart(item);
+    const payload = JSON.stringify(item);
+    event.dataTransfer.setData(TREE_DRAG_MIME, payload);
+    event.dataTransfer.setData("text/plain", payload);
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  function handleDirectoryDragOver(event: React.DragEvent) {
+    const drag = props.draggingItem;
+    if (!drag) return;
+    if (!props.canDropOnDirectory(drag, props.directory.id)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    if (props.dropTargetId !== props.directory.id) {
+      props.onDropTargetChange(props.directory.id);
+    }
+    props.onEnsureExpanded(props.directory.id);
+  }
+
+  function handleDirectoryDrop(event: React.DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const drag = readTreeDrag(event) ?? props.draggingItem;
+    props.onDropTargetChange(null);
+    if (!drag) return;
+    void props.onDropOnDirectory(drag, props.directory.id);
+  }
+
   return (
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
+            draggable
+            onDragStart={(event) =>
+              startDrag(event, {
+                kind: "directory",
+                id: props.directory.id,
+              })
+            }
+            onDragEnd={props.onDragItemEnd}
+            onDragOver={handleDirectoryDragOver}
+            onDragLeave={(event) => {
+              if (
+                event.currentTarget.contains(event.relatedTarget as Node | null)
+              ) {
+                return;
+              }
+              if (props.dropTargetId === props.directory.id) {
+                props.onDropTargetChange(null);
+              }
+            }}
+            onDrop={handleDirectoryDrop}
             className={`group flex h-8 items-center gap-1 rounded-sm px-1 text-xs hover:bg-[#121212] ${
-              selected
-                ? "bg-[#171717] text-foreground"
-                : "text-[#c4c4c4]"
+              isDropTarget
+                ? "bg-[#1f2a1f] text-foreground ring-1 ring-emerald-700/60"
+                : selected
+                  ? "bg-[#171717] text-foreground"
+                  : "text-[#c4c4c4]"
             }`}
           >
             <button
@@ -900,10 +1109,10 @@ function DirectoryNode(props: DirectoryNodeProps) {
               }}
               className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
             >
-              <Folder size={14} />
+              <Folder size={14} className="shrink-0" />
               <span className="truncate">{props.directory.name}</span>
             </button>
-            <div className="hidden items-center group-hover:flex">
+            <div className="hidden shrink-0 items-center group-hover:flex">
               <button
                 className="icon-button h-6 w-6"
                 onClick={() => props.onCreateNote(props.directory.id)}
@@ -927,6 +1136,12 @@ function DirectoryNode(props: DirectoryNodeProps) {
           >
             <FilePlus2 size={14} />
             New note
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => props.onCreateVisualizeNote(props.directory.id)}
+          >
+            <Waypoints size={14} />
+            New visualize note
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => props.onCreateDirectory(props.directory.id)}
@@ -964,6 +1179,11 @@ function DirectoryNode(props: DirectoryNodeProps) {
             <ContextMenu key={note.id}>
               <ContextMenuTrigger asChild>
                 <button
+                  draggable
+                  onDragStart={(event) =>
+                    startDrag(event, { kind: "note", id: note.id })
+                  }
+                  onDragEnd={props.onDragItemEnd}
                   onClick={() => props.onOpenNote(note.id)}
                   className={`sidebar-row w-full truncate ${
                     props.selectedNoteId === note.id
@@ -971,7 +1191,11 @@ function DirectoryNode(props: DirectoryNodeProps) {
                       : "text-muted-foreground hover:bg-[#111] hover:text-foreground"
                   }`}
                 >
-                  <FileText size={13} className="shrink-0 opacity-60" />
+                  {note.kind === "visualize" ? (
+                    <Waypoints size={13} className="shrink-0 opacity-60" />
+                  ) : (
+                    <FileText size={13} className="shrink-0 opacity-60" />
+                  )}
                   <span className="truncate">{note.title}</span>
                 </button>
               </ContextMenuTrigger>

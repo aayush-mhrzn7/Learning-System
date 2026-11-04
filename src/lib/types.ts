@@ -1,5 +1,10 @@
-import type { EditorDocument } from "@/db/schema";
+import type {
+  EditorDocument,
+  VisualizeState,
+} from "@/db/schema";
 import type { ClaimFlag } from "@/components/claim-flags";
+
+export type NoteKind = "writing" | "visualize";
 
 export type DirectoryItem = {
   id: string;
@@ -11,6 +16,7 @@ export type NoteSummary = {
   id: string;
   directoryId: string;
   title: string;
+  kind: NoteKind;
   status: "draft" | "published";
   updatedAt: string;
 };
@@ -18,6 +24,7 @@ export type NoteSummary = {
 export type NoteDetail = NoteSummary & {
   content: EditorDocument;
   plainText: string;
+  visualize: VisualizeState | null;
   editedSincePublish: boolean;
   factCheckIncomplete: boolean;
   publishedAt: string | null;

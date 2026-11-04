@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { checklistItems, claims, notes } from "@/db/schema";
+import { checklistItems, claims, directories, notes } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
 import { idSchema, noteUpdateSchema } from "@/lib/schemas";
 
@@ -67,6 +67,23 @@ export async function PATCH(request: Request, context: Context) {
     .limit(1);
   if (!current) {
     return Response.json({ error: "Note not found" }, { status: 404 });
+  }
+
+  if (body.data.directoryId !== undefined) {
+    const [directory] = await db
+      .select({ id: directories.id })
+      .from(directories)
+      .where(
+        and(
+          eq(directories.id, body.data.directoryId),
+          eq(directories.userId, userId),
+          isNull(directories.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!directory) {
+      return Response.json({ error: "Directory not found" }, { status: 404 });
+    }
   }
 
   // Guard against client races that autosave an empty editor over a real note.
