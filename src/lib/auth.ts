@@ -1,3 +1,5 @@
+import { cookies } from "next/headers";
+
 const COOKIE_NAME = "learning_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 30;
 
@@ -5,12 +7,6 @@ function bytesToHex(bytes: ArrayBuffer) {
   return Array.from(new Uint8Array(bytes), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
-}
-
-async function sha256(value: string) {
-  return bytesToHex(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
-  );
 }
 
 async function sign(value: string, secret: string) {
@@ -26,45 +22,52 @@ async function sign(value: string, secret: string) {
   );
 }
 
-export async function passwordsMatch(input: string, expected: string) {
-  const [inputHash, expectedHash] = await Promise.all([
-    sha256(input),
-    sha256(expected),
-  ]);
-  if (inputHash.length !== expectedHash.length) return false;
-
+function timingSafeEqualString(left: string, right: string) {
+  if (left.length !== right.length) return false;
   let different = 0;
-  for (let index = 0; index < inputHash.length; index += 1) {
-    different |= inputHash.charCodeAt(index) ^ expectedHash.charCodeAt(index);
+  for (let index = 0; index < left.length; index += 1) {
+    different |= left.charCodeAt(index) ^ right.charCodeAt(index);
   }
   return different === 0;
 }
 
-export async function createSessionToken() {
-  const password = process.env.APP_PASSWORD;
+export async function createSessionToken(userId: string) {
   const secret = process.env.AUTH_SECRET;
-  if (!password || !secret) {
-    throw new Error("APP_PASSWORD and AUTH_SECRET must be configured");
+  if (!secret) {
+    throw new Error("AUTH_SECRET must be configured");
   }
 
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-  const fingerprint = await sha256(password);
-  const payload = `${expiresAt}.${fingerprint}`;
+  const payload = `${userId}.${expiresAt}`;
   return `${payload}.${await sign(payload, secret)}`;
 }
 
-export async function verifySessionToken(token?: string) {
-  const password = process.env.APP_PASSWORD;
+export async function verifySessionToken(
+  token?: string,
+): Promise<string | null> {
   const secret = process.env.AUTH_SECRET;
-  if (!token || !password || !secret) return false;
+  if (!token || !secret) return null;
 
-  const [expiresAt, fingerprint, signature] = token.split(".");
-  if (!expiresAt || !fingerprint || !signature) return false;
-  if (Number(expiresAt) <= Math.floor(Date.now() / 1000)) return false;
-  if (!(await passwordsMatch(fingerprint, await sha256(password)))) return false;
+  const [userId, expiresAt, signature] = token.split(".");
+  if (!userId || !expiresAt || !signature) return null;
+  if (Number(expiresAt) <= Math.floor(Date.now() / 1000)) return null;
 
-  const expected = await sign(`${expiresAt}.${fingerprint}`, secret);
-  return passwordsMatch(signature, expected);
+  const expected = await sign(`${userId}.${expiresAt}`, secret);
+  if (!timingSafeEqualString(signature, expected)) return null;
+  return userId;
+}
+
+export async function getSessionUserId() {
+  const jar = await cookies();
+  return verifySessionToken(jar.get(COOKIE_NAME)?.value);
+}
+
+export async function requireUserId() {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return { userId: null as string | null, error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  return { userId, error: null as Response | null };
 }
 
 export const authCookie = {

@@ -1,17 +1,25 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { directories, notes } from "@/db/schema";
+import { requireUserId } from "@/lib/auth";
 import { noteCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: Request) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const directoryId = new URL(request.url).searchParams.get("directoryId");
   const rows = await db
     .select()
     .from(notes)
     .where(
       directoryId
-        ? and(eq(notes.directoryId, directoryId), isNull(notes.deletedAt))
-        : isNull(notes.deletedAt),
+        ? and(
+            eq(notes.userId, userId),
+            eq(notes.directoryId, directoryId),
+            isNull(notes.deletedAt),
+          )
+        : and(eq(notes.userId, userId), isNull(notes.deletedAt)),
     )
     .orderBy(desc(notes.updatedAt))
     .limit(100);
@@ -19,6 +27,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const parsed = noteCreateSchema.safeParse(
     await request.json().catch(() => null),
   );
@@ -33,6 +44,7 @@ export async function POST(request: Request) {
     .where(
       and(
         eq(directories.id, parsed.data.directoryId),
+        eq(directories.userId, userId),
         isNull(directories.deletedAt),
       ),
     )
@@ -43,7 +55,10 @@ export async function POST(request: Request) {
 
   const [note] = await db
     .insert(notes)
-    .values(parsed.data)
+    .values({
+      ...parsed.data,
+      userId,
+    })
     .returning();
 
   return Response.json({ note }, { status: 201 });

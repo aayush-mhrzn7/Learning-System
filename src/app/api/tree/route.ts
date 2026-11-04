@@ -1,13 +1,19 @@
-import { asc, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { directories, notes } from "@/db/schema";
+import { requireUserId } from "@/lib/auth";
 
 export async function GET() {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const [directoryRows, noteRows] = await Promise.all([
     db
       .select()
       .from(directories)
-      .where(isNull(directories.deletedAt))
+      .where(
+        and(eq(directories.userId, userId), isNull(directories.deletedAt)),
+      )
       .orderBy(asc(directories.name)),
     db
       .select({
@@ -18,7 +24,7 @@ export async function GET() {
         updatedAt: notes.updatedAt,
       })
       .from(notes)
-      .where(isNull(notes.deletedAt))
+      .where(and(eq(notes.userId, userId), isNull(notes.deletedAt)))
       .orderBy(asc(notes.title)),
   ]);
 

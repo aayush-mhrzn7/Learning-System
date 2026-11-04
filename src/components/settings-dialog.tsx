@@ -45,13 +45,27 @@ const defaults: SettingsState = {
   },
 };
 
+function withExclusiveProvider(
+  state: SettingsState,
+  activeProvider: ProviderId,
+): SettingsState {
+  const providers = { ...state.providers };
+  for (const id of Object.keys(providers) as ProviderId[]) {
+    providers[id] = {
+      ...providers[id],
+      enabled: id === activeProvider,
+    };
+  }
+  return { activeProvider, providers };
+}
+
 function loadSettings(): SettingsState {
   if (typeof window === "undefined") return defaults;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<SettingsState>;
-    return {
+    const merged: SettingsState = {
       activeProvider: parsed.activeProvider ?? defaults.activeProvider,
       providers: {
         gpt: { ...defaults.providers.gpt, ...parsed.providers?.gpt },
@@ -61,6 +75,16 @@ function loadSettings(): SettingsState {
         },
       },
     };
+    const enabledIds = (Object.keys(merged.providers) as ProviderId[]).filter(
+      (id) => merged.providers[id].enabled,
+    );
+    const active =
+      enabledIds.length === 1
+        ? enabledIds[0]!
+        : merged.providers[merged.activeProvider]?.enabled
+          ? merged.activeProvider
+          : enabledIds[0] ?? merged.activeProvider;
+    return withExclusiveProvider(merged, active);
   } catch {
     return defaults;
   }
@@ -194,6 +218,11 @@ export function SettingsDialog({
     });
   }
 
+  function enableOnly(id: ProviderId) {
+    persist(withExclusiveProvider(settings, id));
+    setSelected(id);
+  }
+
   const provider = settings.providers[selected];
   const meta = providerMeta[selected];
 
@@ -238,7 +267,7 @@ export function SettingsDialog({
               <div className="flex flex-col gap-0.5">
                 {(Object.keys(providerMeta) as ProviderId[]).map((id) => {
                   const item = providerMeta[id];
-                  const enabled = settings.providers[id].enabled;
+                  const enabled = settings.activeProvider === id;
                   return (
                     <div
                       key={id}
@@ -264,9 +293,11 @@ export function SettingsDialog({
                       </button>
                       <Switch
                         checked={enabled}
-                        onCheckedChange={(checked) =>
-                          updateProvider(id, { enabled: checked })
-                        }
+                        onCheckedChange={(checked) => {
+                          // Toggle on → this becomes the only enabled provider.
+                          // Toggle off is ignored so one provider always stays on.
+                          if (checked) enableOnly(id);
+                        }}
                       />
                     </div>
                   );
@@ -352,15 +383,15 @@ export function SettingsDialog({
                       Use as active provider
                     </p>
                     <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
-                      Default for fact-check and gaps.
+                      Turning this on disables the other provider automatically.
                     </p>
                   </div>
                   <Switch
                     size="md"
                     checked={settings.activeProvider === selected}
-                    onCheckedChange={() =>
-                      persist({ ...settings, activeProvider: selected })
-                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) enableOnly(selected);
+                    }}
                   />
                 </div>
               </div>

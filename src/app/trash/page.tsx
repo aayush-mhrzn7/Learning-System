@@ -5,6 +5,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type TrashBatch = {
   batchId: string;
@@ -15,10 +23,18 @@ type TrashBatch = {
   deletedAt: string;
 };
 
+type ConfirmAction =
+  | { kind: "empty" }
+  | { kind: "delete"; batch: TrashBatch };
+
 export default function TrashPage() {
   const [batches, setBatches] = useState<TrashBatch[]>([]);
-  const [pendingDelete, setPendingDelete] = useState<TrashBatch | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [emptying, setEmptying] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
+    null,
+  );
 
   async function load() {
     const response = await fetch("/api/trash");
@@ -34,37 +50,71 @@ export default function TrashPage() {
   }, []);
 
   async function restore(batchId: string) {
+    if (pendingId || emptying) return;
     const previous = batches;
+    setPendingId(batchId);
+    const toastId = toast.loading("Restoring…");
     setBatches((current) =>
       current.filter((batch) => batch.batchId !== batchId),
     );
-    const response = await fetch(`/api/trash/${batchId}`, { method: "POST" });
-    if (!response.ok) {
-      setBatches(previous);
-      toast.error("Could not restore item");
-      return;
+    try {
+      const response = await fetch(`/api/trash/${batchId}`, { method: "POST" });
+      if (!response.ok) {
+        setBatches(previous);
+        toast.error("Could not restore item", { id: toastId });
+        return;
+      }
+      toast.success("Restored", { id: toastId });
+    } finally {
+      setPendingId(null);
     }
-    toast.success("Restored");
   }
 
-  async function remove() {
-    if (!pendingDelete) return;
-    const batch = pendingDelete;
+  async function remove(batch: TrashBatch) {
+    if (pendingId || emptying) return;
     const previous = batches;
-    setPendingDelete(null);
+    setPendingId(batch.batchId);
+    setConfirmAction(null);
+    const toastId = toast.loading("Deleting…");
     setBatches((current) =>
       current.filter((item) => item.batchId !== batch.batchId),
     );
-    const response = await fetch(`/api/trash/${batch.batchId}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      setBatches(previous);
-      toast.error("Could not permanently delete item");
-      return;
+    try {
+      const response = await fetch(`/api/trash/${batch.batchId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        setBatches(previous);
+        toast.error("Could not permanently delete item", { id: toastId });
+        return;
+      }
+      toast.success("Permanently deleted", { id: toastId });
+    } finally {
+      setPendingId(null);
     }
-    toast.success("Permanently deleted");
   }
+
+  async function removeAll() {
+    if (pendingId || emptying || batches.length === 0) return;
+    const previous = batches;
+    setEmptying(true);
+    setConfirmAction(null);
+    const toastId = toast.loading("Emptying…");
+    setBatches([]);
+    try {
+      const response = await fetch("/api/trash", { method: "DELETE" });
+      if (!response.ok) {
+        setBatches(previous);
+        toast.error("Could not empty Trash", { id: toastId });
+        return;
+      }
+      toast.success("Trash emptied", { id: toastId });
+    } finally {
+      setEmptying(false);
+    }
+  }
+
+  const busy = emptying || Boolean(pendingId);
 
   return (
     <main className="min-h-screen bg-background px-6 py-16 text-foreground sm:px-10">
@@ -82,9 +132,20 @@ export default function TrashPage() {
               good.
             </p>
           </div>
-          <Button asChild variant="outline">
-            <Link href="/">Back</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {!loading && batches.length > 0 ? (
+              <Button
+                variant="destructive"
+                disabled={busy}
+                onClick={() => setConfirmAction({ kind: "empty" })}
+              >
+                {emptying ? "Emptying…" : "Delete all"}
+              </Button>
+            ) : null}
+            <Button asChild variant="outline">
+              <Link href="/">Back</Link>
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-[10px] border border-[#262626] bg-[#111]">
@@ -121,16 +182,26 @@ export default function TrashPage() {
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={busy}
                 onClick={() => void restore(batch.batchId)}
-                aria-label={`Restore ${batch.name}`}
+                aria-label={
+                  pendingId === batch.batchId
+                    ? `Restoring ${batch.name}`
+                    : `Restore ${batch.name}`
+                }
               >
-                <RotateCcw />
+                <RotateCcw
+                  className={
+                    pendingId === batch.batchId ? "animate-spin" : undefined
+                  }
+                />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
                 className="hover:text-[#f87171]"
-                onClick={() => setPendingDelete(batch)}
+                disabled={busy}
+                onClick={() => setConfirmAction({ kind: "delete", batch })}
                 aria-label={`Permanently delete ${batch.name}`}
               >
                 <Trash2 />
@@ -138,34 +209,60 @@ export default function TrashPage() {
             </div>
           ))}
         </div>
-
-        {pendingDelete ? (
-          <div className="mt-4 rounded-[10px] border border-[#262626] bg-[#111] p-5">
-            <h2 className="text-[15px] font-medium tracking-[-0.02em]">
-              Permanently delete?
-            </h2>
-            <p className="mt-1.5 text-[12.5px] leading-5 text-muted-foreground">
-              “{pendingDelete.name}” and its contents cannot be recovered.
-            </p>
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPendingDelete(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => void remove()}
-              >
-                Delete permanently
-              </Button>
-            </div>
-          </div>
-        ) : null}
       </div>
+
+      <Dialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => {
+          if (!open && !busy) setConfirmAction(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {confirmAction?.kind === "empty"
+                ? "Empty Trash?"
+                : "Permanently delete?"}
+            </DialogTitle>
+            <DialogDescription>
+              {confirmAction?.kind === "empty"
+                ? "Every item in Trash will be permanently deleted."
+                : `“${confirmAction?.batch.name}” and its contents cannot be recovered.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => setConfirmAction(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                if (confirmAction?.kind === "empty") void removeAll();
+                else if (confirmAction?.kind === "delete") {
+                  void remove(confirmAction.batch);
+                }
+              }}
+            >
+              {confirmAction?.kind === "empty"
+                ? emptying
+                  ? "Emptying…"
+                  : "Delete all permanently"
+                : pendingId
+                  ? "Deleting…"
+                  : "Delete permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

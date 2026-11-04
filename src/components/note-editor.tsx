@@ -36,11 +36,13 @@ export function NoteEditor({
   sidebarCollapsed,
   onOpenSidebar,
   onTreeChanged,
+  onTitleChange,
 }: {
   noteId: string;
   sidebarCollapsed: boolean;
   onOpenSidebar: () => void;
   onTreeChanged: () => Promise<void>;
+  onTitleChange: (noteId: string, title: string) => void;
 }) {
   const [payload, setPayload] = useState<NotePayload | null>(null);
   const [title, setTitle] = useState("");
@@ -51,6 +53,7 @@ export function NoteEditor({
   const [checkingProgress, setCheckingProgress] = useState("");
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
+  const [publishing, setPublishing] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [hovered, setHovered] = useState<{
     claim: ClaimFlag;
@@ -150,9 +153,12 @@ export function NoteEditor({
           }
         : current,
     );
+    setTitle(data.note.title);
+    titleRef.current = data.note.title;
+    onTitleChange(noteIdRef.current, data.note.title);
     setSaveState("saved");
     await onTreeChanged();
-  }, [editor, onTreeChanged]);
+  }, [editor, onTitleChange, onTreeChanged]);
 
   useEffect(() => {
     saveNowRef.current = saveNow;
@@ -312,14 +318,20 @@ export function NoteEditor({
   }
 
   async function publish() {
-    await saveNow();
-    const response = await fetch(`/api/notes/${noteId}/publish`, {
-      method: "POST",
-    });
-    if (!response.ok) return;
-    const { note } = (await response.json()) as { note: NoteDetail };
-    setPayload((current) => (current ? { ...current, note } : current));
-    void factCheck();
+    if (publishing || checking) return;
+    setPublishing(true);
+    try {
+      await saveNow();
+      const response = await fetch(`/api/notes/${noteId}/publish`, {
+        method: "POST",
+      });
+      if (!response.ok) return;
+      const { note } = (await response.json()) as { note: NoteDetail };
+      setPayload((current) => (current ? { ...current, note } : current));
+      void factCheck();
+    } finally {
+      setPublishing(false);
+    }
   }
 
   async function toggleChecklist(item: ChecklistItem) {
@@ -412,8 +424,19 @@ export function NoteEditor({
           )}
           {checking ? checkingProgress : "Fact-check"}
         </button>
-        <button onClick={() => void publish()} className="topbar-button solid">
-          {payload.note.status === "published" ? "Re-publish" : "Publish"}
+        <button
+          onClick={() => void publish()}
+          disabled={publishing || checking}
+          className="topbar-button solid"
+        >
+          {publishing ? (
+            <LoaderCircle size={13} className="animate-spin" />
+          ) : null}
+          {publishing
+            ? "Publishing…"
+            : payload.note.status === "published"
+              ? "Re-publish"
+              : "Publish"}
         </button>
       </header>
       {readOnly ? null : <FormattingToolbar editor={editor} />}
@@ -429,14 +452,17 @@ export function NoteEditor({
             value={title}
             readOnly={readOnly}
             onChange={(event) => {
-              setTitle(event.target.value);
-              titleRef.current = event.target.value;
+              const next = event.target.value;
+              setTitle(next);
+              titleRef.current = next;
+              onTitleChange(noteId, next.trim() || "Untitled");
               scheduleSave();
             }}
             onBlur={() => {
               if (!title.trim()) {
                 setTitle("Untitled");
                 titleRef.current = "Untitled";
+                onTitleChange(noteId, "Untitled");
                 scheduleSave();
               }
             }}

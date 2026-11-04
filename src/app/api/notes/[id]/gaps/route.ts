@@ -2,12 +2,16 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { checklistItems, notes } from "@/db/schema";
 import { findMissingTopics } from "@/lib/ai";
+import { requireUserId } from "@/lib/auth";
 import { documentToText } from "@/lib/editor-text";
 import { idSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function POST(_request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid note" }, { status: 400 });
@@ -16,7 +20,9 @@ export async function POST(_request: Request, context: Context) {
   const [note] = await db
     .select({ content: notes.content })
     .from(notes)
-    .where(and(eq(notes.id, id), isNull(notes.deletedAt)))
+    .where(
+      and(eq(notes.id, id), eq(notes.userId, userId), isNull(notes.deletedAt)),
+    )
     .limit(1);
   if (!note) {
     return Response.json({ error: "Note not found" }, { status: 404 });

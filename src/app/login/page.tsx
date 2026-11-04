@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -26,11 +27,14 @@ function LoginForm() {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: form.get("password") }),
+      body: JSON.stringify({
+        email: form.get("email"),
+        password: form.get("password"),
+      }),
     });
 
     if (!response.ok) {
-      setError("Incorrect password");
+      setError("Incorrect email or password");
       setLoading(false);
       return;
     }
@@ -45,9 +49,20 @@ function LoginForm() {
         <p className="mb-10 text-xs uppercase tracking-[0.28em] text-muted-foreground">
           Learning System
         </p>
-        <h1 className="mb-8 text-2xl font-medium tracking-tight">
-          Enter password
-        </h1>
+        <h1 className="mb-8 text-2xl font-medium tracking-tight">Log in</h1>
+        <label htmlFor="email" className="sr-only">
+          Email
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          autoFocus
+          required
+          className="mb-4 h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground"
+          placeholder="Email"
+        />
         <label htmlFor="password" className="sr-only">
           Password
         </label>
@@ -55,7 +70,7 @@ function LoginForm() {
           id="password"
           name="password"
           type="password"
-          autoFocus
+          autoComplete="current-password"
           required
           className="h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground"
           placeholder="Password"
@@ -70,6 +85,12 @@ function LoginForm() {
         >
           {loading ? "Opening…" : "Continue"}
         </button>
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          No account?{" "}
+          <Link href="/signup" className="text-foreground underline-offset-4 hover:underline">
+            Sign up
+          </Link>
+        </p>
       </form>
     </main>
   );

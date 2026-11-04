@@ -33,6 +33,7 @@ export function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [firstDirectoryOpen, setFirstDirectoryOpen] = useState(false);
   const [firstDirectoryName, setFirstDirectoryName] = useState("");
+  const [creatingDirectory, setCreatingDirectory] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const openNote = useCallback((id: string) => {
@@ -83,6 +84,18 @@ export function Workspace() {
     [],
   );
 
+  const onNoteTitleChange = useCallback(
+    (id: string, title: string) => {
+      applyOptimisticTree((current) => ({
+        ...current,
+        notes: current.notes.map((note) =>
+          note.id === id ? { ...note, title } : note,
+        ),
+      }));
+    },
+    [applyOptimisticTree],
+  );
+
   useEffect(() => {
     const task = window.setTimeout(() => void loadTree(), 0);
     return () => window.clearTimeout(task);
@@ -128,7 +141,8 @@ export function Workspace() {
   }
 
   async function createFirstDirectory() {
-    if (!firstDirectoryName.trim()) return;
+    if (!firstDirectoryName.trim() || creatingDirectory) return;
+    setCreatingDirectory(true);
     const tempId = crypto.randomUUID();
     const previous = treeRef.current;
     applyOptimisticTree((current) => ({
@@ -138,18 +152,22 @@ export function Workspace() {
         { id: tempId, name: firstDirectoryName.trim(), parentId: null },
       ],
     }));
-    setFirstDirectoryOpen(false);
-    const response = await fetch("/api/directories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: firstDirectoryName, parentId: null }),
-    });
-    if (!response.ok) {
-      applyOptimisticTree(() => previous);
-      return;
+    try {
+      const response = await fetch("/api/directories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: firstDirectoryName, parentId: null }),
+      });
+      if (!response.ok) {
+        applyOptimisticTree(() => previous);
+        return;
+      }
+      setFirstDirectoryOpen(false);
+      await loadTree();
+      setFirstDirectoryName("");
+    } finally {
+      setCreatingDirectory(false);
     }
-    await loadTree();
-    setFirstDirectoryName("");
   }
 
   if (!loaded) {
@@ -171,6 +189,7 @@ export function Workspace() {
           onOptimisticTree={applyOptimisticTree}
           onCollapse={collapseSidebar}
           onSearch={() => setSearchOpen(true)}
+          onSettings={() => setSettingsOpen(true)}
         />
       </div>
 
@@ -181,6 +200,7 @@ export function Workspace() {
           sidebarCollapsed={sidebarCollapsed}
           onOpenSidebar={openSidebar}
           onTreeChanged={loadTree}
+          onTitleChange={onNoteTitleChange}
         />
       ) : (
         <main className="relative grid flex-1 place-items-center">
@@ -245,12 +265,13 @@ export function Workspace() {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={creatingDirectory}
                 onClick={() => setFirstDirectoryOpen(false)}
               >
                 Cancel
               </Button>
-              <Button type="submit" size="sm">
-                Create
+              <Button type="submit" size="sm" disabled={creatingDirectory}>
+                {creatingDirectory ? "Creating…" : "Create"}
               </Button>
             </DialogFooter>
           </form>

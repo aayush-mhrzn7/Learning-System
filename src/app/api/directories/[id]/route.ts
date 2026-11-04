@@ -1,6 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { directories } from "@/db/schema";
+import { requireUserId } from "@/lib/auth";
 import {
   directoryDeleteMatchSchema,
   directoryUpdateSchema,
@@ -10,6 +11,9 @@ import {
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid directory" }, { status: 400 });
@@ -18,7 +22,13 @@ export async function GET(_request: Request, context: Context) {
   const [directory] = await db
     .select()
     .from(directories)
-    .where(and(eq(directories.id, id), isNull(directories.deletedAt)))
+    .where(
+      and(
+        eq(directories.id, id),
+        eq(directories.userId, userId),
+        isNull(directories.deletedAt),
+      ),
+    )
     .limit(1);
 
   if (!directory) {
@@ -29,6 +39,9 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   const body = directoryUpdateSchema.safeParse(
     await request.json().catch(() => null),
@@ -40,7 +53,13 @@ export async function PATCH(request: Request, context: Context) {
   const [directory] = await db
     .update(directories)
     .set({ name: body.data.name, updatedAt: new Date() })
-    .where(and(eq(directories.id, id), isNull(directories.deletedAt)))
+    .where(
+      and(
+        eq(directories.id, id),
+        eq(directories.userId, userId),
+        isNull(directories.deletedAt),
+      ),
+    )
     .returning();
   if (!directory) {
     return Response.json({ error: "Directory not found" }, { status: 404 });
@@ -49,6 +68,9 @@ export async function PATCH(request: Request, context: Context) {
 }
 
 export async function DELETE(request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid directory" }, { status: 400 });
@@ -57,7 +79,13 @@ export async function DELETE(request: Request, context: Context) {
   const [directory] = await db
     .select({ id: directories.id, name: directories.name })
     .from(directories)
-    .where(and(eq(directories.id, id), isNull(directories.deletedAt)))
+    .where(
+      and(
+        eq(directories.id, id),
+        eq(directories.userId, userId),
+        isNull(directories.deletedAt),
+      ),
+    )
     .limit(1);
 
   if (!directory) {
@@ -81,12 +109,15 @@ export async function DELETE(request: Request, context: Context) {
   const result = await db.execute(sql`
     WITH RECURSIVE subtree AS (
       SELECT id FROM directories
-      WHERE id = ${id}::uuid AND deleted_at IS NULL
+      WHERE id = ${id}::uuid
+        AND user_id = ${userId}::uuid
+        AND deleted_at IS NULL
       UNION ALL
       SELECT child.id
       FROM directories child
       JOIN subtree parent ON child.parent_id = parent.id
-      WHERE child.deleted_at IS NULL
+      WHERE child.user_id = ${userId}::uuid
+        AND child.deleted_at IS NULL
     ),
     trashed_directories AS (
       UPDATE directories
@@ -96,7 +127,9 @@ export async function DELETE(request: Request, context: Context) {
     )
     UPDATE notes
     SET deleted_at = now(), delete_batch_id = ${batchId}::uuid
-    WHERE directory_id IN (SELECT id FROM subtree) AND deleted_at IS NULL
+    WHERE directory_id IN (SELECT id FROM subtree)
+      AND user_id = ${userId}::uuid
+      AND deleted_at IS NULL
     RETURNING id
   `);
 

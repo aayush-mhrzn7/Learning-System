@@ -28,10 +28,29 @@ export const claimVerdict = pgEnum("claim_verdict", [
   "unsure",
 ]);
 
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: text("email").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("users_email_idx").on(table.email)],
+);
+
 export const directories = pgTable(
   "directories",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     parentId: uuid("parent_id").references(
       (): AnyPgColumn => directories.id,
@@ -47,6 +66,7 @@ export const directories = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index("directories_user_idx").on(table.userId),
     index("directories_parent_idx").on(table.parentId),
     index("directories_deleted_idx").on(table.deletedAt),
     index("directories_delete_batch_idx").on(table.deleteBatchId),
@@ -57,6 +77,9 @@ export const notes = pgTable(
   "notes",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     directoryId: uuid("directory_id")
       .notNull()
       .references(() => directories.id, { onDelete: "cascade" }),
@@ -84,6 +107,7 @@ export const notes = pgTable(
       .defaultNow(),
   },
   (table) => [
+    index("notes_user_idx").on(table.userId),
     index("notes_directory_idx").on(table.directoryId),
     index("notes_deleted_idx").on(table.deletedAt),
     index("notes_delete_batch_idx").on(table.deleteBatchId),
@@ -133,6 +157,7 @@ export const checklistItems = pgTable(
   (table) => [index("checklist_note_idx").on(table.noteId)],
 );
 
+export type User = typeof users.$inferSelect;
 export type Directory = typeof directories.$inferSelect;
 export type Note = typeof notes.$inferSelect;
 export type Claim = typeof claims.$inferSelect;

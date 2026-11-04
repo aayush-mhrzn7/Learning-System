@@ -1,11 +1,15 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { checklistItems, claims, notes } from "@/db/schema";
+import { requireUserId } from "@/lib/auth";
 import { idSchema, noteUpdateSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid note" }, { status: 400 });
@@ -14,7 +18,9 @@ export async function GET(_request: Request, context: Context) {
   const [note] = await db
     .select()
     .from(notes)
-    .where(and(eq(notes.id, id), isNull(notes.deletedAt)))
+    .where(
+      and(eq(notes.id, id), eq(notes.userId, userId), isNull(notes.deletedAt)),
+    )
     .limit(1);
   if (!note) {
     return Response.json({ error: "Note not found" }, { status: 404 });
@@ -36,6 +42,9 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   const body = noteUpdateSchema.safeParse(
     await request.json().catch(() => null),
@@ -52,7 +61,9 @@ export async function PATCH(request: Request, context: Context) {
       plainText: notes.plainText,
     })
     .from(notes)
-    .where(and(eq(notes.id, id), isNull(notes.deletedAt)))
+    .where(
+      and(eq(notes.id, id), eq(notes.userId, userId), isNull(notes.deletedAt)),
+    )
     .limit(1);
   if (!current) {
     return Response.json({ error: "Note not found" }, { status: 404 });
@@ -73,7 +84,7 @@ export async function PATCH(request: Request, context: Context) {
         current.status === "published" && changed ? true : undefined,
       updatedAt: new Date(),
     })
-    .where(eq(notes.id, id))
+    .where(and(eq(notes.id, id), eq(notes.userId, userId)))
     .returning();
 
   if (body.data.plainText !== undefined) {
@@ -88,6 +99,9 @@ export async function PATCH(request: Request, context: Context) {
 }
 
 export async function DELETE(_request: Request, context: Context) {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
     return Response.json({ error: "Invalid note" }, { status: 400 });
@@ -97,7 +111,9 @@ export async function DELETE(_request: Request, context: Context) {
   const [note] = await db
     .update(notes)
     .set({ deletedAt: new Date(), deleteBatchId: batchId })
-    .where(and(eq(notes.id, id), isNull(notes.deletedAt)))
+    .where(
+      and(eq(notes.id, id), eq(notes.userId, userId), isNull(notes.deletedAt)),
+    )
     .returning({ id: notes.id });
   if (!note) {
     return Response.json({ error: "Note not found" }, { status: 404 });

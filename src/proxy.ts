@@ -3,13 +3,16 @@ import { authCookie, verifySessionToken } from "@/lib/auth";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname === "/login" || pathname.startsWith("/api/auth/");
-  const authenticated = await verifySessionToken(
-    request.cookies.get(authCookie.name)?.value,
+  const isAuthRoute =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname.startsWith("/api/auth/");
+  const authenticated = Boolean(
+    await verifySessionToken(request.cookies.get(authCookie.name)?.value),
   );
 
   if (isAuthRoute) {
-    if (authenticated && pathname === "/login") {
+    if (authenticated && (pathname === "/login" || pathname === "/signup")) {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return NextResponse.next();

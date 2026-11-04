@@ -19,10 +19,15 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ```dotenv
 DATABASE_URL=postgresql://...
-APP_PASSWORD=your-login-password
 AUTH_SECRET=a-long-random-string
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-5.6-luna
+```
+
+Create an account at `/signup`, or seed an owner and attach existing rows:
+
+```bash
+MIGRATE_EMAIL=you@example.com MIGRATE_PASSWORD='…' bun run db:migrate-auth-user
 ```
 
 ## Stack
@@ -60,4 +65,4 @@ bun run db:studio    # browse data
 - Weighted full-text search with `Cmd/Ctrl + K`
 - Streamed claim-by-claim web fact-checking with inline flags and sources
 - Persistent “What’s missing” checklist generated on publish
-- Single-user password gate
+- Email/password signup and login (content scoped per user)

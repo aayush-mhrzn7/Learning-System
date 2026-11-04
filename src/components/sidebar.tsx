@@ -10,6 +10,7 @@ import {
   Pencil,
   PanelLeftClose,
   Search,
+  Settings,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -47,6 +48,7 @@ type SidebarProps = {
   onOptimisticTree: (updater: (tree: TreePayload) => TreePayload) => void;
   onCollapse: () => void;
   onSearch: () => void;
+  onSettings: () => void;
 };
 
 type EditAction =
@@ -76,6 +78,9 @@ export function Sidebar(props: SidebarProps) {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [selectedDirectoryId, setSelectedDirectoryId] = useState<string | null>(
+    null,
+  );
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     const stored = localStorage.getItem("learning-expanded-directories");
@@ -137,7 +142,7 @@ export function Sidebar(props: SidebarProps) {
 
   async function confirmDelete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!deleteAction) return;
+    if (!deleteAction || submitting) return;
 
     if (deleteAction.kind === "directory") {
       const parsed = directoryDeleteMatchSchema(deleteAction.name).safeParse({
@@ -154,7 +159,7 @@ export function Sidebar(props: SidebarProps) {
     const previous = props.tree;
     const action = deleteAction;
     const confirmation = deleteConfirmation;
-    closeDelete();
+    setSubmitting(true);
 
     if (action.kind === "note") {
       props.onOptimisticTree((tree) => ({
@@ -163,6 +168,9 @@ export function Sidebar(props: SidebarProps) {
       }));
     } else {
       const removed = descendantDirectoryIds(action.id);
+      if (selectedDirectoryId && removed.has(selectedDirectoryId)) {
+        setSelectedDirectoryId(null);
+      }
       props.onOptimisticTree((tree) => ({
         directories: tree.directories.filter(
           (directory) => !removed.has(directory.id),
@@ -175,22 +183,27 @@ export function Sidebar(props: SidebarProps) {
       action.kind === "note"
         ? `/api/notes/${action.id}`
         : `/api/directories/${action.id}`;
-    const response = await fetch(endpoint, {
-      method: "DELETE",
-      headers:
-        action.kind === "directory"
-          ? { "Content-Type": "application/json" }
-          : undefined,
-      body:
-        action.kind === "directory"
-          ? JSON.stringify({ confirmation })
-          : undefined,
-    });
-    if (!response.ok) {
-      rollback(previous, "Could not move item to Trash");
-      return;
+    try {
+      const response = await fetch(endpoint, {
+        method: "DELETE",
+        headers:
+          action.kind === "directory"
+            ? { "Content-Type": "application/json" }
+            : undefined,
+        body:
+          action.kind === "directory"
+            ? JSON.stringify({ confirmation })
+            : undefined,
+      });
+      if (!response.ok) {
+        rollback(previous, "Could not move item to Trash");
+        return;
+      }
+      closeDelete();
+      toast.success("Moved to Trash");
+    } finally {
+      setSubmitting(false);
     }
-    toast.success("Moved to Trash");
   }
 
   async function submitEdit(event: FormEvent<HTMLFormElement>) {
@@ -326,14 +339,26 @@ export function Sidebar(props: SidebarProps) {
   );
 
   const currentDirectoryId = useMemo(() => {
+    if (
+      selectedDirectoryId &&
+      props.tree.directories.some((item) => item.id === selectedDirectoryId)
+    ) {
+      return selectedDirectoryId;
+    }
     if (props.selectedNoteId) {
       const note = props.tree.notes.find(
         (item) => item.id === props.selectedNoteId,
       );
       if (note) return note.directoryId;
     }
-    return roots[0]?.id ?? null;
-  }, [props.selectedNoteId, props.tree.notes, roots]);
+    // Root context: do not nest under an existing directory.
+    return null;
+  }, [
+    props.selectedNoteId,
+    props.tree.directories,
+    props.tree.notes,
+    selectedDirectoryId,
+  ]);
 
   function startCreateNote(directoryId?: string | null) {
     const target = directoryId ?? currentDirectoryId;
@@ -367,24 +392,72 @@ export function Sidebar(props: SidebarProps) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (editAction || deleteAction) return;
-      if (event.key.toLowerCase() !== "n") return;
 
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+        if (selectedDirectoryId) {
+          const directory = props.tree.directories.find(
+            (item) => item.id === selectedDirectoryId,
+          );
+          if (!directory) return;
+          event.preventDefault();
+          openDelete({
+            kind: "directory",
+            id: directory.id,
+            name: directory.name,
+          });
+          return;
+        }
+
+        if (props.selectedNoteId) {
+          const note = props.tree.notes.find(
+            (item) => item.id === props.selectedNoteId,
+          );
+          if (!note) return;
+          event.preventDefault();
+          openDelete({
+            kind: "note",
+            id: note.id,
+            name: note.title,
+          });
+        }
+        return;
+      }
+
+      if (event.key.toLowerCase() !== "n") return;
 
       // ⌘N / ⌘⇧N are reserved by Chrome; only Ctrl+N / Ctrl+⇧N are used.
       if (!event.ctrlKey || event.metaKey || event.altKey) return;
 
       event.preventDefault();
       event.stopPropagation();
-      if (event.shiftKey) startCreateDirectory(currentDirectoryId);
+      if (event.shiftKey) startCreateDirectory(selectedDirectoryId);
       else startCreateNote(currentDirectoryId);
     }
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [currentDirectoryId, deleteAction, editAction]);
+  }, [
+    currentDirectoryId,
+    deleteAction,
+    editAction,
+    props.selectedNoteId,
+    props.tree.directories,
+    props.tree.notes,
+    selectedDirectoryId,
+  ]);
 
   return (
     <aside className="flex h-screen w-72 shrink-0 flex-col border-r border-border bg-[#080808]">
@@ -412,7 +485,14 @@ export function Sidebar(props: SidebarProps) {
 
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="flex-1 overflow-y-auto px-2 py-4">
+          <div
+            className="flex-1 overflow-y-auto px-2 py-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                setSelectedDirectoryId(null);
+              }
+            }}
+          >
             {roots.length ? (
               roots.map((directory) => (
                 <DirectoryNode
@@ -421,8 +501,10 @@ export function Sidebar(props: SidebarProps) {
                   directories={props.tree.directories}
                   notes={props.tree.notes}
                   expanded={expanded}
+                  selectedDirectoryId={selectedDirectoryId}
                   selectedNoteId={props.selectedNoteId}
                   onToggle={toggle}
+                  onSelectDirectory={setSelectedDirectoryId}
                   onCreateDirectory={(parentId) =>
                     startCreateDirectory(parentId)
                   }
@@ -459,7 +541,10 @@ export function Sidebar(props: SidebarProps) {
                       name: note.title,
                     })
                   }
-                  onOpenNote={props.onOpenNote}
+                  onOpenNote={(id) => {
+                    setSelectedDirectoryId(null);
+                    props.onOpenNote(id);
+                  }}
                 />
               ))
             ) : (
@@ -482,7 +567,7 @@ export function Sidebar(props: SidebarProps) {
             </kbd>
           </ContextMenuItem>
           <ContextMenuItem
-            onSelect={() => startCreateDirectory(currentDirectoryId)}
+            onSelect={() => startCreateDirectory(selectedDirectoryId)}
           >
             <FolderPlus size={14} />
             New directory
@@ -490,15 +575,26 @@ export function Sidebar(props: SidebarProps) {
               ⌃⇧N
             </kbd>
           </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => startCreateDirectory(null)}>
-            <FolderPlus size={14} />
-            New root directory
-          </ContextMenuItem>
+          {selectedDirectoryId ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => startCreateDirectory(null)}>
+                <FolderPlus size={14} />
+                New root directory
+              </ContextMenuItem>
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
 
       <div className="border-t border-border p-2">
+        <button
+          onClick={props.onSettings}
+          className="sidebar-row w-full text-muted-foreground hover:text-foreground"
+        >
+          <Settings size={14} />
+          Settings
+        </button>
         <button
           onClick={() => router.push("/trash")}
           className="sidebar-row w-full text-muted-foreground hover:text-foreground"
@@ -609,6 +705,7 @@ export function Sidebar(props: SidebarProps) {
                 type="button"
                 variant="outline"
                 size="sm"
+                disabled={submitting}
                 onClick={closeDelete}
               >
                 Cancel
@@ -618,13 +715,14 @@ export function Sidebar(props: SidebarProps) {
                 variant="destructive"
                 size="sm"
                 disabled={
-                  deleteAction?.kind === "directory" &&
-                  !directoryDeleteMatchSchema(deleteAction.name).safeParse({
-                    confirmation: deleteConfirmation,
-                  }).success
+                  submitting ||
+                  (deleteAction?.kind === "directory" &&
+                    !directoryDeleteMatchSchema(deleteAction.name).safeParse({
+                      confirmation: deleteConfirmation,
+                    }).success)
                 }
               >
-                Move to Trash
+                {submitting ? "Moving…" : "Move to Trash"}
               </Button>
             </DialogFooter>
           </form>
@@ -639,8 +737,10 @@ type DirectoryNodeProps = {
   directories: DirectoryItem[];
   notes: NoteSummary[];
   expanded: Set<string>;
+  selectedDirectoryId: string | null;
   selectedNoteId: string | null;
   onToggle: (id: string) => void;
+  onSelectDirectory: (id: string) => void;
   onCreateDirectory: (parentId: string) => void;
   onCreateNote: (directoryId: string) => void;
   onRenameDirectory: (directory: DirectoryItem) => void;
@@ -652,6 +752,7 @@ type DirectoryNodeProps = {
 
 function DirectoryNode(props: DirectoryNodeProps) {
   const open = props.expanded.has(props.directory.id);
+  const selected = props.selectedDirectoryId === props.directory.id;
   const children = props.directories
     .filter((item) => item.parentId === props.directory.id)
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -663,12 +764,27 @@ function DirectoryNode(props: DirectoryNodeProps) {
     <div>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div className="group flex h-8 items-center gap-1 rounded-sm px-1 text-xs text-[#c4c4c4] hover:bg-[#121212]">
+          <div
+            className={`group flex h-8 items-center gap-1 rounded-sm px-1 text-xs hover:bg-[#121212] ${
+              selected
+                ? "bg-[#171717] text-foreground"
+                : "text-[#c4c4c4]"
+            }`}
+          >
             <button
               onClick={() => props.onToggle(props.directory.id)}
-              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+              className="icon-button h-6 w-6 shrink-0"
+              aria-label={open ? "Collapse directory" : "Expand directory"}
             >
               {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            </button>
+            <button
+              onClick={() => {
+                props.onSelectDirectory(props.directory.id);
+                props.onToggle(props.directory.id);
+              }}
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            >
               <Folder size={14} />
               <span className="truncate">{props.directory.name}</span>
             </button>
