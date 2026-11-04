@@ -699,7 +699,7 @@ export function NoteEditor({
                 <PanelLeftOpen size={16} />
               </button>
             ) : null}
-            <span className="truncate text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="truncate text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
               {payload.note.status}
               {payload.note.publishedAt ? (
                 <span className="normal-case tracking-normal opacity-70">
@@ -709,7 +709,7 @@ export function NoteEditor({
               ) : null}
             </span>
             {payload.note.editedSincePublish ? (
-              <span className="hidden truncate text-[9px] text-amber-300/80 sm:inline">
+              <span className="hidden truncate text-[11px] text-amber-300/80 sm:inline">
                 Edited since publish · {formatStamp(payload.note.updatedAt)}
               </span>
             ) : null}
@@ -717,13 +717,13 @@ export function NoteEditor({
               <button
                 onClick={() => void runPipeline("fact-check")}
                 disabled={pipelineBusy}
-                className="flex min-w-0 items-center gap-1 truncate text-[9px] text-amber-300/80"
+                className="flex min-w-0 items-center gap-1 truncate text-[11px] text-amber-300/80"
               >
                 <AlertCircle size={12} className="shrink-0" />
                 <span className="truncate">Retry fact-check</span>
               </button>
             ) : null}
-            <span className="ml-auto shrink-0 text-[9px] text-[#666] sm:hidden">
+            <span className="ml-auto shrink-0 text-[11px] text-[#666] sm:hidden">
               {saveState === "saving"
                 ? "Saving…"
                 : saveState === "error"
@@ -733,7 +733,7 @@ export function NoteEditor({
           </div>
 
           <div className="ml-auto flex items-center justify-end gap-1.5 overflow-x-auto sm:gap-2">
-            <span className="mr-1 hidden shrink-0 text-[9px] text-[#666] sm:inline">
+            <span className="mr-1 hidden shrink-0 text-[11px] text-[#666] sm:inline">
               {saveState === "saving"
                 ? "Saving…"
                 : saveState === "error"
@@ -973,7 +973,7 @@ export function NoteEditor({
             }}
           >
             <div className="border border-[#333] bg-[#111] p-4 shadow-2xl">
-              <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              <p className="mb-2 text-[12px] uppercase tracking-[0.18em] text-muted-foreground">
                 {hovered.claim.stale ? "Stale result" : hovered.claim.verdict}
               </p>
               <p className="text-xs leading-5 text-[#ddd]">
@@ -987,7 +987,7 @@ export function NoteEditor({
                       href={source.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="block truncate text-[11px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                      className="block truncate text-[13px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
                     >
                       {source.title}
                     </a>

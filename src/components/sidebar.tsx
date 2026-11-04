@@ -674,15 +674,13 @@ export function Sidebar(props: SidebarProps) {
         <span className="text-xs font-medium uppercase tracking-[0.2em]">
           Learning
         </span>
-        {props.mobile ? (
-          <button
-            onClick={props.onCollapse}
-            className="icon-button"
-            aria-label="Collapse sidebar"
-          >
-            <PanelLeftClose size={16} />
-          </button>
-        ) : null}
+        <button
+          onClick={props.onCollapse}
+          className="icon-button"
+          aria-label="Collapse sidebar"
+        >
+          <PanelLeftClose size={16} />
+        </button>
       </div>
 
       <button
@@ -691,7 +689,7 @@ export function Sidebar(props: SidebarProps) {
       >
         <Search size={14} />
         Search
-        <kbd className="ml-auto hidden font-mono text-[10px] sm:inline">⌘K</kbd>
+        <kbd className="ml-auto hidden font-mono text-[12px] sm:inline">⌘K</kbd>
       </button>
 
       <ContextMenu>
@@ -787,7 +785,7 @@ export function Sidebar(props: SidebarProps) {
           <ContextMenuItem onSelect={() => startCreateNote(currentDirectoryId)}>
             <FilePlus2 size={14} />
             New note
-            <kbd className="ml-auto hidden font-mono text-[10px] text-muted-foreground sm:inline">
+            <kbd className="ml-auto hidden font-mono text-[12px] text-muted-foreground sm:inline">
               ⌃N
             </kbd>
           </ContextMenuItem>
@@ -802,7 +800,7 @@ export function Sidebar(props: SidebarProps) {
           >
             <FolderPlus size={14} />
             New directory
-            <kbd className="ml-auto hidden font-mono text-[10px] text-muted-foreground sm:inline">
+            <kbd className="ml-auto hidden font-mono text-[12px] text-muted-foreground sm:inline">
               ⌃⇧N
             </kbd>
           </ContextMenuItem>

@@ -112,8 +112,13 @@ export function Workspace() {
     function syncViewport() {
       const mobile = mq.matches;
       setIsMobile(mobile);
-      // Desktop sidebar stays open; only mobile can collapse it.
-      setSidebarCollapsed(mobile);
+      if (mobile) {
+        setSidebarCollapsed(true);
+        return;
+      }
+      setSidebarCollapsed(
+        localStorage.getItem("learning-sidebar-collapsed") === "true",
+      );
     }
     syncViewport();
     mq.addEventListener("change", syncViewport);
@@ -131,9 +136,14 @@ export function Workspace() {
         setSettingsOpen(true);
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
-        if (!isMobileViewport()) return;
         event.preventDefault();
-        setSidebarCollapsed((current) => !current);
+        setSidebarCollapsed((current) => {
+          const next = !current;
+          if (!isMobileViewport()) {
+            localStorage.setItem("learning-sidebar-collapsed", String(next));
+          }
+          return next;
+        });
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
@@ -146,12 +156,17 @@ export function Workspace() {
   }, []);
 
   function collapseSidebar() {
-    if (!isMobileViewport()) return;
     setSidebarCollapsed(true);
+    if (!isMobileViewport()) {
+      localStorage.setItem("learning-sidebar-collapsed", "true");
+    }
   }
 
   function openSidebar() {
     setSidebarCollapsed(false);
+    if (!isMobileViewport()) {
+      localStorage.setItem("learning-sidebar-collapsed", "false");
+    }
   }
 
   async function createFirstDirectory() {

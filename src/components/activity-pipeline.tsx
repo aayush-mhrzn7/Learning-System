@@ -212,7 +212,7 @@ export function ActivityPipeline({
         />
         <div className="flex h-14 items-center justify-between border-b border-border px-3 sm:px-4">
           <div className="min-w-0">
-            <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
               Activity
             </p>
             <p className="truncate text-xs font-medium">
@@ -247,7 +247,7 @@ export function ActivityPipeline({
           <div className="border-t border-border px-4 py-3">
             <p
               className={cn(
-                "text-[10px] uppercase tracking-[0.14em]",
+                "text-[12px] uppercase tracking-[0.14em]",
                 run.status === "running" && "text-muted-foreground",
                 run.status === "success" && "text-foreground",
                 run.status === "failed" && "text-destructive",
@@ -303,7 +303,7 @@ function PipelineStepRow({ step }: { step: PipelineStep }) {
             {step.label}
           </span>
           {step.detail ? (
-            <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
+            <span className="mt-0.5 block text-[13px] leading-4 text-muted-foreground">
               {step.detail}
             </span>
           ) : null}
@@ -318,7 +318,7 @@ function PipelineStepRow({ step }: { step: PipelineStep }) {
       </button>
 
       {open && hasLogs ? (
-        <pre className="mx-2 mb-2 max-h-64 overflow-auto border border-border/50 bg-[#050505] px-2.5 py-2 font-mono text-[10px] leading-4 text-[#bdbdbd] whitespace-pre-wrap break-words">
+        <pre className="mx-2 mb-2 max-h-64 overflow-auto border border-border/50 bg-[#050505] px-2.5 py-2 font-mono text-[12px] leading-4 text-[#bdbdbd] whitespace-pre-wrap break-words">
           {step.logs.join("\n")}
         </pre>
       ) : null}
@@ -351,7 +351,7 @@ function StepIcon({ status }: { status: PipelineStepStatus }) {
   }
   if (status === "skipped") {
     return (
-      <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border border-[#444] text-[8px] text-muted-foreground">
+      <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border border-[#444] text-[10px] text-muted-foreground">
         –
       </span>
     );

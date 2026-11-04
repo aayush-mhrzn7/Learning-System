@@ -24,8 +24,9 @@ export function VisualizeNote({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  // Flip immediately on first send so we leave the landing UI before the API returns.
   const [started, setStarted] = useState(false);
+  const [streamReply, setStreamReply] = useState("");
+  const [streamExplanation, setStreamExplanation] = useState("");
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,6 +36,8 @@ export function VisualizeNote({
     setDraft("");
     setBusy(false);
     setStarted(false);
+    setStreamReply("");
+    setStreamExplanation("");
     void (async () => {
       const response = await fetch(`/api/notes/${noteId}`);
       if (!response.ok) {
@@ -56,7 +59,7 @@ export function VisualizeNote({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "nearest" });
-  }, [visualize.messages, busy]);
+  }, [visualize.messages, busy, streamReply, streamExplanation]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -75,11 +78,12 @@ export function VisualizeNote({
       ],
     };
 
-    // Leave the empty landing immediately — don't wait on the first UI.
     setDraft("");
     setStarted(true);
     setVisualize(optimistic);
     setBusy(true);
+    setStreamReply("");
+    setStreamExplanation("");
 
     try {
       const response = await fetch(`/api/notes/${noteId}/visualize`, {
@@ -87,22 +91,63 @@ export function VisualizeNote({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
       });
-      const data = (await response.json().catch(() => null)) as {
-        note?: { title: string; visualize: VisualizeState | null };
-        error?: string;
-      } | null;
-      if (!response.ok || !data?.note) {
-        throw new Error(data?.error || "Visualize request failed");
+      if (!response.ok || !response.body) {
+        const fail = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(fail?.error || "Visualize request failed");
       }
-      setVisualize(normalizeVisualize(data.note.visualize));
-      if (data.note.title !== title) {
-        setTitle(data.note.title);
-        onTitleChange(noteId, data.note.title);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let sawDone = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const event = JSON.parse(line) as {
+            type: string;
+            reply?: string;
+            explanation?: string;
+            error?: string;
+            note?: { title: string; visualize: VisualizeState | null };
+          };
+          if (event.type === "delta") {
+            setStreamReply(event.reply ?? "");
+            setStreamExplanation(event.explanation ?? "");
+            continue;
+          }
+          if (event.type === "error") {
+            throw new Error(event.error || "Visualize request failed");
+          }
+          if (event.type === "done" && event.note) {
+            sawDone = true;
+            setVisualize(normalizeVisualize(event.note.visualize));
+            setStreamReply("");
+            setStreamExplanation("");
+            if (event.note.title !== title) {
+              setTitle(event.note.title);
+              onTitleChange(noteId, event.note.title);
+            }
+          }
+        }
+      }
+
+      if (!sawDone) {
+        throw new Error("Visualize stream ended early");
       }
     } catch (error) {
       setVisualize(previous);
       setStarted(previous.messages.length > 0);
       setDraft(message);
+      setStreamReply("");
+      setStreamExplanation("");
       toast.error(
         error instanceof Error ? error.message : "Visualize request failed",
       );
@@ -122,7 +167,7 @@ export function VisualizeNote({
   const empty = !started;
 
   return (
-    <main className="relative flex min-w-0 flex-1 flex-col bg-black">
+    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black">
       {sidebarCollapsed ? (
         <button
           onClick={onOpenSidebar}
@@ -154,17 +199,17 @@ export function VisualizeNote({
           </div>
         </div>
       ) : (
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-12 sm:px-6">
-          <div className="mb-3 flex items-center gap-2 text-[11px] text-[#888]">
+        <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
+          <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-[#888]">
             <Waypoints size={13} />
             <span className="truncate font-medium text-[#ccc]">{title}</span>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain pr-1">
             {visualize.messages.map((turn, index) => (
               <div key={`${turn.at}-${index}`} className="space-y-2">
                 <p
-                  className={`text-[12px] leading-5 ${
+                  className={`text-[14px] leading-5 ${
                     turn.role === "user" ? "text-[#aaa]" : "text-[#ddd]"
                   }`}
                 >
@@ -174,32 +219,80 @@ export function VisualizeNote({
                   <span className="whitespace-pre-wrap">{turn.content}</span>
                 </p>
                 {turn.role === "assistant" && turn.diagram ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <VisualizeDiagramView diagram={turn.diagram} />
                     {turn.explanation ? (
-                      <p className="text-[13px] leading-5 text-[#bbb]">
+                      <p className="text-[15px] leading-6 text-[#bbb]">
                         {turn.explanation}
                       </p>
+                    ) : null}
+                    {turn.formula ? (
+                      <div className="rounded-lg border border-[#222] bg-[#0c0c0c] px-3 py-2">
+                        <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
+                          Formula
+                        </p>
+                        <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[14px] leading-5 text-[#e8e8e8]">
+                          {turn.formula}
+                        </pre>
+                      </div>
+                    ) : null}
+                    {turn.sampleInput || turn.sampleOutput ? (
+                      <div className="grid gap-2 rounded-lg border border-[#222] bg-[#0c0c0c] p-3 text-[13px] leading-5 sm:grid-cols-2">
+                        <div>
+                          <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
+                            Sample input
+                          </p>
+                          <p className="whitespace-pre-wrap text-[#ccc]">
+                            {turn.sampleInput || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
+                            Sample output
+                          </p>
+                          <p className="whitespace-pre-wrap text-[#ccc]">
+                            {turn.sampleOutput || "—"}
+                          </p>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
               </div>
             ))}
             {busy ? (
-              <div className="space-y-2">
-                <p className="flex items-center gap-1.5 text-[12px] text-[#777]">
-                  <LoaderCircle size={12} className="animate-spin" />
-                  Drawing…
-                </p>
-                <div className="flex h-[200px] items-center justify-center rounded-lg border border-[#222] bg-[#0a0a0a] text-[12px] text-[#666]">
-                  Drawing diagram…
+              <div className="space-y-3">
+                {(streamReply || streamExplanation) && (
+                  <div className="space-y-2">
+                    {streamReply ? (
+                      <p className="text-[14px] leading-5 text-[#ddd]">
+                        <span className="mr-1 text-[#555]">Viz</span>
+                        <span className="whitespace-pre-wrap">
+                          {streamReply}
+                        </span>
+                      </p>
+                    ) : null}
+                    {streamExplanation ? (
+                      <p className="whitespace-pre-wrap text-[15px] leading-6 text-[#bbb]">
+                        {streamExplanation}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+                <div className="flex h-[200px] items-center justify-center rounded-lg border border-[#222] bg-[#0a0a0a] text-[14px] text-[#666]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <LoaderCircle size={12} className="animate-spin" />
+                    {streamReply || streamExplanation
+                      ? "Finishing diagram…"
+                      : "Drawing…"}
+                  </span>
                 </div>
               </div>
             ) : null}
             <div ref={bottomRef} />
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 shrink-0">
             <PromptBox
               inputRef={inputRef}
               draft={draft}
@@ -245,10 +338,10 @@ function PromptBox({
         rows={3}
         disabled={busy}
         placeholder={placeholder}
-        className="w-full resize-none bg-transparent px-1 py-1 text-[13px] leading-5 text-[#eee] outline-none placeholder:text-[#555] disabled:opacity-60"
+        className="w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-5 text-[#eee] outline-none placeholder:text-[#555] disabled:opacity-60"
       />
       <div className="mt-2 flex items-center justify-between px-0.5">
-        <span className="inline-flex items-center gap-1 text-[10px] text-[#555]">
+        <span className="inline-flex items-center gap-1 text-[12px] text-[#555]">
           <Sparkles size={11} />
           Visualize only
         </span>
@@ -256,7 +349,7 @@ function PromptBox({
           type="button"
           disabled={!draft.trim() || busy}
           onClick={onSend}
-          className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-black disabled:opacity-30"
+          className="rounded-full bg-white px-3 py-1 text-[13px] font-medium text-black disabled:opacity-30"
         >
           {busy ? "…" : "Send"}
         </button>

@@ -231,7 +231,7 @@ export function VisualizeDiagramView({
       .data(resolvedEdges.filter((edge) => edge.label))
       .join("text")
       .attr("fill", "#777")
-      .attr("font-size", 10)
+      .attr("font-size", 12)
       .attr("text-anchor", "middle")
       .attr("x", (d) => (d.x1 + d.x2) / 2)
       .attr("y", (d) => (d.y1 + d.y2) / 2 - 6)
@@ -259,7 +259,7 @@ export function VisualizeDiagramView({
     node
       .append("text")
       .attr("fill", "#e8e8e8")
-      .attr("font-size", 11)
+      .attr("font-size", 13)
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "middle")
       .text((d) => d.label);

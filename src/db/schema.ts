@@ -34,6 +34,10 @@ export type VisualizeMessage = {
   /** Present on accepted assistant turns — each question keeps its own diagram. */
   diagram?: VisualizeDiagram | null;
   explanation?: string;
+  sampleInput?: string;
+  sampleOutput?: string;
+  /** Plain-text / ASCII / LaTeX-ish formula when the topic is mathematical. */
+  formula?: string;
 };
 
 export type VisualizeState = {

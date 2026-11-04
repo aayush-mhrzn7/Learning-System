@@ -166,7 +166,7 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
             <Unlink size={14} />
           </Button>
         ) : null}
-        <span className="ml-auto hidden font-mono text-[10px] text-[#555] md:block">
+        <span className="ml-auto hidden font-mono text-[12px] text-[#555] md:block">
           Markdown shortcuts supported
         </span>
       </div>

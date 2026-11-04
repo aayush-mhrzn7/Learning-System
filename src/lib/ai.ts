@@ -615,8 +615,11 @@ const inlineReplySchema = z.object({
 const visualizeTurnSchema = z.object({
   accepted: z.boolean(),
   title: z.string().max(80).nullable(),
-  reply: z.string().min(1).max(600),
-  explanation: z.string().max(400),
+  reply: z.string().min(1).max(900),
+  explanation: z.string().max(1600),
+  sampleInput: z.string().max(400),
+  sampleOutput: z.string().max(400),
+  formula: z.string().max(600),
   diagram: z
     .object({
       nodes: z
@@ -650,17 +653,93 @@ const visualizeTurnSchema = z.object({
 
 export type VisualizeTurnResult = z.infer<typeof visualizeTurnSchema>;
 
-/** Tiny architecture/algorithm diagram turn — rejects general chat. */
-export async function answerVisualizeTurn(
-  credentials: ResolvedProviderCredentials,
-  args: {
-    message: string;
-    history?: { role: "user" | "assistant"; content: string }[];
-    hasDiagram: boolean;
+const visualizeSchemaPayload = {
+  type: "object",
+  properties: {
+    accepted: { type: "boolean" },
+    title: { type: ["string", "null"] },
+    reply: { type: "string" },
+    explanation: { type: "string" },
+    sampleInput: { type: "string" },
+    sampleOutput: { type: "string" },
+    formula: { type: "string" },
+    diagram: {
+      anyOf: [
+        {
+          type: "object",
+          properties: {
+            nodes: {
+              type: "array",
+              maxItems: 8,
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  label: { type: "string" },
+                },
+                required: ["id", "label"],
+                additionalProperties: false,
+              },
+            },
+            edges: {
+              type: "array",
+              maxItems: 12,
+              items: {
+                type: "object",
+                properties: {
+                  source: { type: "string" },
+                  target: { type: "string" },
+                  label: { type: "string" },
+                },
+                required: ["source", "target", "label"],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ["nodes", "edges"],
+          additionalProperties: false,
+        },
+        { type: "null" },
+      ],
+    },
   },
-): Promise<VisualizeTurnResult> {
+  required: [
+    "accepted",
+    "title",
+    "reply",
+    "explanation",
+    "sampleInput",
+    "sampleOutput",
+    "formula",
+    "diagram",
+  ],
+  additionalProperties: false,
+} as const;
+
+const visualizeInstructions = [
+  "You only visualize software systems, architecture, algorithms, data flows, and similar diagrams.",
+  "Reject general chat, homework essays, coding help, writing, opinions, or anything that is not a visualize request.",
+  "When rejected: accepted=false, diagram=null, explanation=\"\", sampleInput=\"\", sampleOutput=\"\", formula=\"\", reply briefly clarifies this tool is only for visualizing software/architecture/algorithms and asks them to rephrase.",
+  "When accepted: accepted=true, return a MINIMAL diagram (prefer ≤6 nodes).",
+  "explanation: 3–6 sentences teaching what the diagram shows, why the stages matter, and how data moves — not a one-liner.",
+  "sampleInput: a concrete tiny example entering the pipeline (quote or short JSON/text).",
+  "sampleOutput: what comes out after the flow for that same example.",
+  "formula: if the topic is mathematical (ranking, similarity, attention, loss, RRF, BM25, softmax, embeddings distance, etc.), include the key equation in plain text / ASCII / simple LaTeX (e.g. score(d)=Σ 1/(k+rank_i(d))). Otherwise formula=\"\".",
+  "reply: 1–2 sentence overview shown above the diagram.",
+  "Node ids must be short snake_case; edge source/target must match node ids; edge label is \"\" when unused.",
+  "Edges must follow pipeline direction (upstream → downstream) so the diagram can lay out top-to-bottom in order.",
+  "Each accepted question gets its own new diagram block (do not assume overwriting a single canvas).",
+  "Follow-ups should draw a fresh diagram for that request. Never invent URLs or research links. Never return executable code.",
+  "title: short note title on the first accepted turn; otherwise null.",
+].join(" ");
+
+function packVisualizeInput(args: {
+  message: string;
+  history?: { role: "user" | "assistant"; content: string }[];
+  hasDiagram: boolean;
+}) {
   const history = (args.history ?? []).slice(-8);
-  const packed = [
+  return [
     history.length
       ? `PRIOR TURNS:\n${history
           .map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`)
@@ -674,81 +753,18 @@ export async function answerVisualizeTurn(
   ]
     .filter((line) => line !== "")
     .join("\n");
+}
 
-  const data = await structuredResponse<unknown>(
-    credentials,
-    "visualize_turn",
-    {
-      type: "object",
-      properties: {
-        accepted: { type: "boolean" },
-        title: { type: ["string", "null"] },
-        reply: { type: "string" },
-        explanation: { type: "string" },
-        diagram: {
-          anyOf: [
-            {
-              type: "object",
-              properties: {
-                nodes: {
-                  type: "array",
-                  maxItems: 8,
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string" },
-                      label: { type: "string" },
-                    },
-                    required: ["id", "label"],
-                    additionalProperties: false,
-                  },
-                },
-                edges: {
-                  type: "array",
-                  maxItems: 12,
-                  items: {
-                    type: "object",
-                    properties: {
-                      source: { type: "string" },
-                      target: { type: "string" },
-                      label: { type: "string" },
-                    },
-                    required: ["source", "target", "label"],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ["nodes", "edges"],
-              additionalProperties: false,
-            },
-            { type: "null" },
-          ],
-        },
-      },
-      required: ["accepted", "title", "reply", "explanation", "diagram"],
-      additionalProperties: false,
-    },
-    [
-      "You only visualize software systems, architecture, algorithms, data flows, and similar diagrams.",
-      "Reject general chat, homework essays, coding help, writing, opinions, or anything that is not a visualize request.",
-      "When rejected: accepted=false, diagram=null, explanation=\"\", reply briefly clarifies this tool is only for visualizing software/architecture/algorithms and asks them to rephrase.",
-      "When accepted: accepted=true, return a MINIMAL diagram (prefer ≤6 nodes) and a short explanation (≤2 sentences).",
-      "Node ids must be short snake_case; edge source/target must match node ids; edge label is \"\" when unused.",
-      "Edges must follow pipeline direction (upstream → downstream) so the diagram can lay out top-to-bottom in order.",
-      "Each accepted question gets its own new diagram block (do not assume overwriting a single canvas).",
-      "Follow-ups should draw a fresh diagram for that request. Never invent URLs or research links. Never return executable code.",
-      "title: short note title on the first accepted turn; otherwise null.",
-    ].join(" "),
-    packed,
-    false,
-  );
-
+function finalizeVisualizeTurn(data: unknown): VisualizeTurnResult {
   const parsed = visualizeTurnSchema.parse(data);
   if (!parsed.accepted) {
     return {
       ...parsed,
       diagram: null,
       explanation: "",
+      sampleInput: "",
+      sampleOutput: "",
+      formula: "",
       title: null,
     };
   }
@@ -758,12 +774,14 @@ export async function answerVisualizeTurn(
       accepted: false,
       diagram: null,
       explanation: "",
+      sampleInput: "",
+      sampleOutput: "",
+      formula: "",
       title: null,
       reply:
         "I can only draw software, architecture, and algorithm diagrams. Ask me to visualize something like that.",
     };
   }
-  // Drop edges that point at missing nodes — keeps D3 stable.
   const ids = new Set(parsed.diagram.nodes.map((node) => node.id));
   return {
     ...parsed,
@@ -774,6 +792,123 @@ export async function answerVisualizeTurn(
         .slice(0, 12),
     },
   };
+}
+
+/** Peek a (possibly partial) JSON string field while the model streams. */
+function peekJsonString(raw: string, key: string): string | undefined {
+  const marker = `"${key}"`;
+  const keyIdx = raw.indexOf(marker);
+  if (keyIdx < 0) return undefined;
+  let i = keyIdx + marker.length;
+  while (i < raw.length && /\s|:/.test(raw[i]!)) i += 1;
+  if (raw[i] !== '"') return undefined;
+  i += 1;
+  let out = "";
+  while (i < raw.length) {
+    const ch = raw[i]!;
+    if (ch === "\\") {
+      if (i + 1 >= raw.length) return out;
+      const next = raw[i + 1]!;
+      const escaped: Record<string, string> = {
+        n: "\n",
+        t: "\t",
+        r: "\r",
+        '"': '"',
+        "\\": "\\",
+        "/": "/",
+      };
+      out += escaped[next] ?? next;
+      i += 2;
+      continue;
+    }
+    if (ch === '"') return out;
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+export type VisualizeStreamEvent =
+  | { type: "delta"; reply: string; explanation: string }
+  | { type: "done"; turn: VisualizeTurnResult }
+  | { type: "error"; error: string };
+
+/** Stream visualize JSON; emit reply/explanation as they appear, then the final turn. */
+export async function* streamVisualizeTurn(
+  credentials: ResolvedProviderCredentials,
+  args: {
+    message: string;
+    history?: { role: "user" | "assistant"; content: string }[];
+    hasDiagram: boolean;
+  },
+): AsyncGenerator<VisualizeStreamEvent> {
+  const client = createClient(credentials);
+  const packed = packVisualizeInput(args);
+  let raw = "";
+
+  try {
+    const stream = await client.responses.create({
+      model: credentials.model,
+      instructions: visualizeInstructions,
+      input: packed,
+      store: false,
+      stream: true,
+      ...responseExtras(credentials, false),
+      text: {
+        format: {
+          type: "json_schema",
+          name: "visualize_turn",
+          strict: true,
+          schema: visualizeSchemaPayload,
+        },
+      },
+    });
+
+    for await (const event of stream) {
+      if (event.type !== "response.output_text.delta") continue;
+      raw += event.delta;
+      yield {
+        type: "delta",
+        reply: peekJsonString(raw, "reply") ?? "",
+        explanation: peekJsonString(raw, "explanation") ?? "",
+      };
+    }
+
+    if (!raw.trim()) {
+      yield { type: "error", error: "The model returned no structured output" };
+      return;
+    }
+    yield {
+      type: "done",
+      turn: finalizeVisualizeTurn(parseJsonObject(raw)),
+    };
+  } catch (error) {
+    yield {
+      type: "error",
+      error:
+        error instanceof Error ? error.message : "Visualize request failed",
+    };
+  }
+}
+
+/** Tiny architecture/algorithm diagram turn — rejects general chat. */
+export async function answerVisualizeTurn(
+  credentials: ResolvedProviderCredentials,
+  args: {
+    message: string;
+    history?: { role: "user" | "assistant"; content: string }[];
+    hasDiagram: boolean;
+  },
+): Promise<VisualizeTurnResult> {
+  const data = await structuredResponse<unknown>(
+    credentials,
+    "visualize_turn",
+    visualizeSchemaPayload,
+    visualizeInstructions,
+    packVisualizeInput(args),
+    false,
+  );
+  return finalizeVisualizeTurn(data);
 }
 
 /** Tutor reply about a selected passage — no web search, no note rewrites. */

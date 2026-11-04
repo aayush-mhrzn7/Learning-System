@@ -121,7 +121,7 @@ export default function TrashPage() {
       <div className="mx-auto w-full max-w-2xl">
         <div className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div>
-            <p className="mb-6 text-[11px] uppercase tracking-[0.22em] text-muted-foreground sm:mb-8">
+            <p className="mb-6 text-[13px] uppercase tracking-[0.22em] text-muted-foreground sm:mb-8">
               Learning System
             </p>
             <h1 className="text-[28px] font-medium leading-tight tracking-[-0.035em]">
@@ -150,12 +150,12 @@ export default function TrashPage() {
 
         <div className="overflow-hidden rounded-[10px] border border-[#262626] bg-[#111]">
           {loading ? (
-            <p className="px-5 py-12 text-center text-[13px] text-muted-foreground">
+            <p className="px-5 py-12 text-center text-[15px] text-muted-foreground">
               Loading…
             </p>
           ) : null}
           {!loading && batches.length === 0 ? (
-            <p className="px-5 py-12 text-center text-[13px] text-muted-foreground">
+            <p className="px-5 py-12 text-center text-[15px] text-muted-foreground">
               Trash is empty
             </p>
           ) : null}
@@ -168,7 +168,7 @@ export default function TrashPage() {
                 <p className="truncate text-[14px] tracking-[-0.015em]">
                   {batch.name}
                 </p>
-                <p className="mt-1 text-[12px] text-muted-foreground">
+                <p className="mt-1 text-[14px] text-muted-foreground">
                   {batch.directoryCount > 0
                     ? `${batch.directoryCount} ${
                         batch.directoryCount === 1

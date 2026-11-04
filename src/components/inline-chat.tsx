@@ -184,11 +184,11 @@ export function InlineChat({
             selectionRef.current = anchor.text;
             setOpen(true);
           }}
-          className="flex items-center gap-1.5 rounded-md border border-[#333] bg-[#141414] px-2.5 py-1.5 text-[11px] text-[#ddd] shadow-xl hover:border-[#555] hover:bg-[#1a1a1a]"
+          className="flex items-center gap-1.5 rounded-md border border-[#333] bg-[#141414] px-2.5 py-1.5 text-[13px] text-[#ddd] shadow-xl hover:border-[#555] hover:bg-[#1a1a1a]"
         >
           <MessageSquarePlus size={13} className="text-[#aaa]" />
           Inline chat
-          <kbd className="ml-1 rounded border border-[#333] px-1 py-px text-[9px] text-[#777]">
+          <kbd className="ml-1 rounded border border-[#333] px-1 py-px text-[11px] text-[#777]">
             ⌘J
           </kbd>
         </button>
@@ -196,7 +196,7 @@ export function InlineChat({
         <div className="w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-[#333] bg-[#111] shadow-2xl">
           <div className="flex items-start gap-2 border-b border-[#2a2a2a] px-3 py-2">
             <Sparkles size={13} className="mt-0.5 shrink-0 text-[#888]" />
-            <p className="min-w-0 flex-1 text-[11px] leading-4 text-[#999]">
+            <p className="min-w-0 flex-1 text-[13px] leading-4 text-[#999]">
               <span className="text-[#666]">Selected · </span>
               <span className="line-clamp-3 whitespace-pre-wrap text-[#ccc]">
                 {preview}
@@ -216,7 +216,7 @@ export function InlineChat({
               {turns.map((turn, index) => (
                 <p
                   key={`${turn.role}-${index}`}
-                  className={`whitespace-pre-wrap text-[11px] leading-4 ${
+                  className={`whitespace-pre-wrap text-[13px] leading-4 ${
                     turn.role === "user" ? "text-[#aaa]" : "text-[#ddd]"
                   }`}
                 >
@@ -227,7 +227,7 @@ export function InlineChat({
                 </p>
               ))}
               {busy ? (
-                <p className="flex items-center gap-1.5 text-[11px] text-[#777]">
+                <p className="flex items-center gap-1.5 text-[13px] text-[#777]">
                   <LoaderCircle size={12} className="animate-spin" />
                   Thinking…
                 </p>
@@ -254,17 +254,17 @@ export function InlineChat({
               rows={2}
               disabled={busy}
               placeholder="Ask about this selection…"
-              className="w-full resize-none rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-2.5 py-2 text-[12px] leading-5 text-[#eee] outline-none placeholder:text-[#555] focus:border-[#444] disabled:opacity-60"
+              className="w-full resize-none rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-2.5 py-2 text-[14px] leading-5 text-[#eee] outline-none placeholder:text-[#555] focus:border-[#444] disabled:opacity-60"
             />
             <div className="mt-1.5 flex items-center justify-between px-0.5">
-              <span className="text-[10px] text-[#555]">
+              <span className="text-[12px] text-[#555]">
                 Enter to send · Esc to close
               </span>
               <button
                 type="button"
                 disabled={!draft.trim() || busy}
                 onClick={() => void send()}
-                className="rounded-md bg-white px-2 py-1 text-[10px] font-medium text-black disabled:opacity-30"
+                className="rounded-md bg-white px-2 py-1 text-[12px] font-medium text-black disabled:opacity-30"
               >
                 Send
               </button>

@@ -170,7 +170,7 @@ function Switch({
 }
 
 const fieldInputClass =
-  "h-8 rounded-md border-white/10 bg-black/40 text-[11px] text-foreground shadow-none placeholder:text-zinc-600 focus-visible:border-white/25 focus-visible:ring-0 dark:bg-black/40";
+  "h-8 rounded-md border-white/10 bg-black/40 text-[13px] text-foreground shadow-none placeholder:text-zinc-600 focus-visible:border-white/25 focus-visible:ring-0 dark:bg-black/40";
 
 export function SettingsDialog({
   open,
@@ -359,7 +359,7 @@ export function SettingsDialog({
         </DialogDescription>
 
         <aside className="flex w-44 shrink-0 flex-col border-r border-white/10 bg-black/40 p-3">
-          <p className="mb-3 px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500">
+          <p className="mb-3 px-2 text-[12px] font-medium uppercase tracking-[0.18em] text-zinc-500">
             Settings
           </p>
           <div className="flex flex-col gap-0.5">
@@ -413,7 +413,7 @@ export function SettingsDialog({
               <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-4 py-3">
                 <div>
                   <p className="text-xs text-zinc-100">Document minimap</p>
-                  <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
+                  <p className="mt-0.5 text-[13px] leading-5 text-zinc-500">
                     Show the viewport overview and claim markers on the right
                     edge of the note.
                   </p>
@@ -459,7 +459,7 @@ export function SettingsDialog({
                           <span className="block truncate text-xs text-zinc-100">
                             {item.name}
                           </span>
-                          <span className="flex items-center gap-1.5 truncate text-[11px] text-zinc-500">
+                          <span className="flex items-center gap-1.5 truncate text-[13px] text-zinc-500">
                             <StatusDot status={status} />
                             {available ? status.label : "Disabled"}
                           </span>
@@ -587,7 +587,7 @@ export function SettingsDialog({
                         <p className="text-xs text-zinc-100">
                           Use as active provider
                         </p>
-                        <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
+                        <p className="mt-0.5 text-[13px] leading-5 text-zinc-500">
                           {selectedEnabled
                             ? "Turning this on disables the other provider automatically."
                             : "Unavailable while OpenRouter is disabled."}
@@ -662,7 +662,7 @@ function Field({
     <label className="flex flex-col gap-2">
       <span>
         <span className="block text-xs text-zinc-100">{label}</span>
-        <span className="mt-0.5 block text-[11px] leading-4 text-zinc-500">
+        <span className="mt-0.5 block text-[13px] leading-4 text-zinc-500">
           {description}
         </span>
       </span>
