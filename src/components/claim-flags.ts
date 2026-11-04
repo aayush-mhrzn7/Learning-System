@@ -18,6 +18,58 @@ type FlagState = {
 
 export const claimFlagsKey = new PluginKey<FlagState>("claimFlags");
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function rangeFromMatch(
+  positions: number[],
+  start: number,
+  length: number,
+) {
+  let from = -1;
+  let to = -1;
+  for (let index = start; index < start + length; index += 1) {
+    const position = positions[index];
+    if (position !== undefined && position >= 0) {
+      if (from < 0) from = position;
+      to = position + 1;
+    }
+  }
+  if (from < 0 || to <= from) return null;
+  return { from, to };
+}
+
+function findClaimRanges(text: string, claimText: string, positions: number[]) {
+  const needle = claimText.trim();
+  if (!needle) return [] as Array<{ from: number; to: number }>;
+
+  const ranges: Array<{ from: number; to: number }> = [];
+  const pushMatch = (start: number, length: number) => {
+    const range = rangeFromMatch(positions, start, length);
+    if (range) ranges.push(range);
+  };
+
+  let offset = text.indexOf(needle);
+  while (offset !== -1) {
+    pushMatch(offset, needle.length);
+    offset = text.indexOf(needle, offset + 1);
+  }
+  if (ranges.length > 0) return ranges;
+
+  // Extraction uses documentToText whitespace; the live doc may differ
+  // (hard breaks, adjacent marks). Match on flexible whitespace.
+  const parts = needle.split(/\s+/).filter(Boolean).map(escapeRegExp);
+  if (parts.length === 0) return ranges;
+  const pattern = new RegExp(parts.join("\\s+"), "gi");
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    pushMatch(match.index, match[0].length);
+    if (match[0].length === 0) pattern.lastIndex += 1;
+  }
+  return ranges;
+}
+
 function locateClaims(
   document: Parameters<typeof DecorationSet.create>[0],
   claims: ClaimFlag[],
@@ -41,18 +93,10 @@ function locateClaims(
   });
 
   for (const claim of claims) {
-    // Only flag factual errors. "unsure" is noise for the reader.
+    // Only wrong facts get squiggles. Soft/unsure claims stay unmarked.
     if (claim.verdict !== "incorrect") continue;
-    let offset = text.indexOf(claim.claimText);
-    while (offset !== -1) {
-      const from = positions[offset];
-      const finalPosition = positions[offset + claim.claimText.length - 1];
-      if (from >= 0 && finalPosition >= 0) {
-        decorations.push(
-          createDecoration(from, finalPosition + 1, claim),
-        );
-      }
-      offset = text.indexOf(claim.claimText, offset + 1);
+    for (const range of findClaimRanges(text, claim.claimText, positions)) {
+      decorations.push(createDecoration(range.from, range.to, claim));
     }
   }
 

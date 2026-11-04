@@ -8,8 +8,12 @@ import {
 const EXTRACT_CHUNK_CHARS = 2800;
 const DECISION_BATCH_SIZE = 40;
 
-/** Only claims scoring above this get a paid web Responses call. */
+/** Only claims with P(likely wrong) above this get a paid web fact-check. */
 export const CLAIM_WEB_CHECK_THRESHOLD = 0.8;
+/** Hard cap after extract — Decisions never sees a 50-claim firehose. */
+export const MAX_EXTRACTED_CLAIMS = 8;
+/** Hard cap on paid web judges per run (highest suspicion first). */
+export const MAX_WEB_JUDGES = 5;
 
 const extractedClaimsSchema = z.object({
   claims: z.array(
@@ -348,15 +352,63 @@ const claimsSchemaPayload = {
 } as const;
 
 const extractInstructions = [
-  "Extract only independently verifiable factual assertions from the note.",
-  "A claim must assert something about the world, a system, a definition, a mechanism, a number, or a causal relationship that could be true or false.",
-  "Return each claim using the exact contiguous text from the note.",
-  "Do not rewrite, normalize, summarize, or include opinions.",
-  "Skip headings, incomplete fragments, transitions, examples framed as illustration only,",
-  "and any sentence that is mainly about the note's writing quality, missing explanation, chunk boundaries, clarity, or retrieval usefulness.",
-  "Skip pedagogical meta like 'X introduces Y but does not explain…' or 'this can negatively affect…' unless it asserts a checkable technical fact.",
-  "Prefer at most 12 claims from this passage.",
+  "Extract ONLY claims that look suspicious or high-risk to be factually wrong — sparse is better.",
+  "Prioritize: blunt/wrong-looking definitions, contradictions with nearby text, wrong mechanisms/numbers/causal facts.",
+  "Always keep a blunt false definition even when a nearby sentence states the correct one.",
+  "Return each claim using the exact contiguous text from the note. Do not rewrite.",
+  "SKIP ordinary true tutorial facts and pipeline steps (e.g. convert to embeddings, store in a vector DB, retrieve chunks, pass to the LLM).",
+  "SKIP advantages/disadvantages lists, configuration descriptions, soft 'common approach' lines, and example walkthrough narration.",
+  "SKIP headings, fragments, transitions, writing-quality / pedagogy meta.",
+  "Prefer at most 5 claims from this passage. Empty list is fine if nothing looks wrong.",
 ].join(" ");
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Index of claim text in the note, allowing flexible whitespace. */
+function findClaimOffset(noteText: string, claimText: string): number {
+  const needle = claimText.trim();
+  if (!needle) return -1;
+  const exact = noteText.indexOf(needle);
+  if (exact >= 0) return exact;
+  const parts = needle.split(/\s+/).filter(Boolean).map(escapeRegExp);
+  if (parts.length === 0) return -1;
+  const match = new RegExp(parts.join("\\s+"), "i").exec(noteText);
+  return match?.index ?? -1;
+}
+
+/** ±paragraph window around a claim so the judge can interpret it in-note. */
+export function localClaimContext(
+  noteText: string,
+  claimText: string,
+  radius = 2,
+) {
+  const trimmed = noteText.trim();
+  if (!trimmed) return "";
+  const idx = findClaimOffset(trimmed, claimText);
+  if (idx < 0) return "";
+
+  const paragraphs = trimmed.split(/\n{2,}/);
+  let cursor = 0;
+  let hit = 0;
+  for (let i = 0; i < paragraphs.length; i += 1) {
+    const block = paragraphs[i] ?? "";
+    const start = cursor;
+    const end = start + block.length;
+    if (idx >= start && idx <= end) {
+      hit = i;
+      break;
+    }
+    cursor = end + (i < paragraphs.length - 1 ? 2 : 0);
+  }
+
+  const slice = paragraphs
+    .slice(Math.max(0, hit - radius), hit + radius + 1)
+    .join("\n\n")
+    .trim();
+  return slice.length > 2200 ? `${slice.slice(0, 2200)}…` : slice;
+}
 
 export async function extractClaims(
   credentials: ResolvedProviderCredentials,
@@ -383,21 +435,24 @@ export async function extractClaims(
     if (!key || seen.has(key)) continue;
     seen.add(key);
     claims.push({ text: claim.text.trim() });
+    if (claims.length >= MAX_EXTRACTED_CLAIMS) break;
   }
   return claims;
 }
 
 export function shouldWebCheckClaim(score: number) {
+  // score = P(likely factually wrong). Web-search only high-suspicion claims.
   return score > CLAIM_WEB_CHECK_THRESHOLD;
 }
 
 /**
- * OpenAI Decisions API (`gpt-6-luna`): predicate probability per claim.
- * High probability = concrete, checkable fact worth a paid web Responses call.
+ * OpenAI Decisions API (`gpt-6-luna`).
+ * Ask "is this claim likely WRONG?" — only high scores burn a paid web judge.
  */
 export async function decideClaims(
   credentials: ResolvedProviderCredentials,
   claims: { text: string }[],
+  noteText = "",
 ): Promise<{ text: string; score: number }[]> {
   if (claims.length === 0) return [];
   if (credentials.provider !== "gpt") {
@@ -406,12 +461,15 @@ export async function decideClaims(
     );
   }
 
-  const batches: { text: string; index: number }[][] = [];
+  const batches: { text: string; index: number; context: string }[][] = [];
   for (let i = 0; i < claims.length; i += DECISION_BATCH_SIZE) {
     batches.push(
       claims.slice(i, i + DECISION_BATCH_SIZE).map((claim, offset) => ({
         text: claim.text,
         index: i + offset,
+        context: noteText
+          ? localClaimContext(noteText, claim.text, 1).slice(0, 900)
+          : "",
       })),
     );
   }
@@ -426,12 +484,15 @@ export async function decideClaims(
         {
           role: "developer",
           content: [
-            "Decide whether each claim deserves a paid web fact-check.",
-            "True only for concrete, independently verifiable factual assertions that could be false",
-            "(definition, mechanism, property, history, API behavior, numeric claim).",
-            "False for opinions, incomplete fragments, headings, rhetorical questions,",
-            "writing-quality commentary, missing-context complaints, chunking/retrieval pedagogy,",
-            "or anything not checkable as true/false against public sources.",
+            "You are a cheap gate before paid web fact-checking. Minimize web calls.",
+            "For each claim, estimate whether it is LIKELY FACTUALLY WRONG and needs web verification.",
+            "True (high) = likely incorrect: false definitions, wrong mechanisms/numbers, claims that contradict the surrounding note context,",
+            "or blunt mistakes a careful reader would flag (e.g. 'semantic chunking means chunking by character length' next to a correct meaning-based definition).",
+            "False (low) = skip web search: ordinary true tutorial facts, standard RAG pipeline steps,",
+            "correct definitions, soft 'common approach' lines, advantages/disadvantages, config descriptions,",
+            "example walkthrough narration, opinions, incomplete fragments.",
+            "Use surrounding context when provided. When unsure, prefer False (skip) to save cost —",
+            "only True when there is a concrete reason to suspect the claim is wrong.",
           ].join(" "),
         },
         {
@@ -447,6 +508,7 @@ export async function decideClaims(
                 claims: batch.map((item) => ({
                   id: `claim_${item.index}`,
                   text: item.text,
+                  context: item.context || undefined,
                 })),
               },
             },
@@ -456,7 +518,11 @@ export async function decideClaims(
       questions: batch.map((item) => ({
         type: "predicate" as const,
         name: `claim_${item.index}`,
-        instructions: `Is claim id "claim_${item.index}" worth a paid web fact-check?`,
+        instructions: [
+          `Is claim id "claim_${item.index}" LIKELY FACTUALLY WRONG and worth a paid web fact-check?`,
+          `True only if it looks incorrect or contradicts its context.`,
+          `False for ordinary true tutorial content — skip the web call.`,
+        ].join(" "),
       })),
     });
 
@@ -479,7 +545,16 @@ export async function decideClaims(
 export async function judgeClaim(
   credentials: ResolvedProviderCredentials,
   claim: string,
+  noteContext = "",
 ) {
+  const packed = [
+    "CLAIM:",
+    claim,
+    "",
+    "SURROUNDING NOTE CONTEXT (for interpretation only — judge the claim, not the whole window):",
+    noteContext.trim() || "(none)",
+  ].join("\n");
+
   const data = await structuredResponse<unknown>(
     credentials,
     "claim_verdict",
@@ -508,20 +583,29 @@ export async function judgeClaim(
       additionalProperties: false,
     },
     [
-      "Fact-check only the factual truth of this claim using web search.",
-      "Search before answering when the claim depends on facts, definitions, or established knowledge.",
-      "correct = reliable sources support the asserted fact.",
-      "incorrect = reliable sources contradict it. The reason MUST state the wrong part and the correct fact in one or two short sentences.",
-      "unsure = sources conflict or do not cover this specific factual assertion. Do not use unsure for writing quality.",
-      "Never critique missing context, clarity, completeness, chunking, retrieval quality, tone, or how well the claim explains something.",
-      "Never say the claim is incomplete or needs more explanation — that is not a fact-check.",
-      "If the text is not a factual assertion, return unsure with reason 'Not a checkable factual claim.' and empty sources.",
-      "Include direct source URLs only when they support the verdict.",
+      "Fact-check the CLAIM using web search. Use SURROUNDING NOTE CONTEXT only to interpret what the learner meant.",
+      "If context shows an example/walkthrough/observation (e.g. similarity between neighboring sentence embeddings dropping when sample topics shift from FastAPI to PostgreSQL), judge that narrative — do NOT reframe it as a claim that FastAPI or PostgreSQL compute vector similarity.",
+      "correct = sources support the claim as meant in context, OR it is soft fluff / illustration / common-approach wording that is not a false technical assertion.",
+      "incorrect = the learner asserted a false definition, mechanism, number, or causal fact (as meant in context). Example: 'semantic chunking means chunking by character length' while semantic chunking splits by meaning.",
+      "If the context contains a conflicting correct definition of the same term, treat that as strong evidence the CLAIM is incorrect when search agrees.",
+      "For incorrect, reason MUST be one or two short sentences: wrong part + correct fact. Include ≥1 direct source URL. Never return incorrect with empty sources.",
+      "unsure = sources conflict, evidence is weak, or the proposition is under-specified even with context. Prefer unsure over incorrect when evidence is thin.",
+      "Never critique writing quality, missing explanation, clarity, or retrieval usefulness.",
+      "Never invent a framework-vs-database lecture from an illustrative example sentence.",
     ].join(" "),
-    claim,
+    packed,
     true,
   );
-  return verdictSchema.parse(data);
+  const verdict = verdictSchema.parse(data);
+  // No red underline without evidence.
+  if (verdict.verdict === "incorrect" && verdict.sources.length === 0) {
+    return {
+      ...verdict,
+      verdict: "unsure" as const,
+      reason: verdict.reason || "Insufficient sources to mark incorrect.",
+    };
+  }
+  return verdict;
 }
 
 export async function findMissingTopics(

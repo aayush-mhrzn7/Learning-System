@@ -29,9 +29,15 @@ import {
   claimFlagsKey,
   type ClaimFlag,
 } from "@/components/claim-flags";
+import { EditorMinimap } from "@/components/editor-minimap";
 import { FormattingToolbar } from "@/components/formatting-toolbar";
+import { InlineChat } from "@/components/inline-chat";
 import { Button } from "@/components/ui/button";
 import { documentToText } from "@/lib/editor-text";
+import {
+  MINIMAP_CHANGED_EVENT,
+  readMinimapEnabled,
+} from "@/lib/editor-preferences";
 import type {
   ChecklistItem,
   NotePayload,
@@ -39,6 +45,15 @@ import type {
 } from "@/lib/types";
 
 const lowlight = createLowlight(common);
+
+function formatStamp(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function NoteEditor({
   noteId,
@@ -82,10 +97,24 @@ export function NoteEditor({
   const hydratedNoteId = useRef<string | null>(null);
   const saveNowRef = useRef<() => Promise<void>>(async () => undefined);
   const hoverTimer = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLElement | null>(null);
+  const [minimapRevision, setMinimapRevision] = useState(0);
+  const [minimapEnabled, setMinimapEnabled] = useState(true);
 
   useEffect(() => {
     titleRef.current = title;
   }, [title]);
+
+  useEffect(() => {
+    setMinimapEnabled(readMinimapEnabled());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ enabled: boolean }>).detail;
+      setMinimapEnabled(detail?.enabled ?? readMinimapEnabled());
+    }
+    window.addEventListener(MINIMAP_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(MINIMAP_CHANGED_EVENT, onChange);
+  }, []);
 
   useEffect(() => {
     function renamed(event: Event) {
@@ -126,6 +155,7 @@ export function NoteEditor({
     },
     onUpdate: () => {
       if (!loadingContent.current) scheduleSave();
+      setMinimapRevision((value) => value + 1);
     },
   });
 
@@ -226,6 +256,7 @@ export function NoteEditor({
       setSaveState("saved");
       hydratedNoteId.current = noteId;
       loadingContent.current = false;
+      setMinimapRevision((value) => value + 1);
     })();
 
     return () => {
@@ -244,6 +275,7 @@ export function NoteEditor({
     if (editor) {
       editor.view.dispatch(editor.state.tr.setMeta(claimFlagsKey, claims));
     }
+    setMinimapRevision((value) => value + 1);
   }
 
   function clipLog(text: string, max = 120) {
@@ -406,7 +438,7 @@ export function NoteEditor({
                 typeof event.total === "number"
                   ? `gpt-6-luna · ${event.total}`
                   : "gpt-6-luna…",
-              log: "+ OpenAI Decisions gpt-6-luna (threshold > 0.8)",
+              log: "+ OpenAI Decisions gpt-6-luna (likely-wrong > 0.8)",
             });
           }
 
@@ -427,14 +459,14 @@ export function NoteEditor({
               status: "success",
               detail:
                 skipped > 0
-                  ? `Skipped ${skipped} below 0.8`
-                  : "All claims passed threshold",
-              log: `✓ ${total} above 0.8 · ${skipped} skipped`,
+                  ? `Skipped ${skipped} likely-correct`
+                  : "All claims look suspicious",
+              log: `✓ ${total} likely-wrong · ${skipped} skipped`,
             });
             if (total === 0) {
               updateStep(gen, "web", {
                 status: "skipped",
-                detail: skipped > 0 ? "Nothing above 0.8" : "No claims",
+                detail: skipped > 0 ? "Nothing likely-wrong" : "No claims",
                 log: "no web checks required",
               });
             } else {
@@ -643,10 +675,16 @@ export function NoteEditor({
             ) : null}
             <span className="truncate text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
               {payload.note.status}
+              {payload.note.publishedAt ? (
+                <span className="normal-case tracking-normal opacity-70">
+                  {" · "}
+                  {formatStamp(payload.note.publishedAt)}
+                </span>
+              ) : null}
             </span>
             {payload.note.editedSincePublish ? (
               <span className="hidden truncate text-[9px] text-amber-300/80 sm:inline">
-                Edited since publish
+                Edited since publish · {formatStamp(payload.note.updatedAt)}
               </span>
             ) : null}
             {payload.note.factCheckIncomplete ? (
@@ -732,13 +770,18 @@ export function NoteEditor({
         </header>
         {readOnly ? null : <FormattingToolbar editor={editor} />}
 
-        <div
-          className="flex-1 overflow-y-auto"
-          onScroll={() => {
-            if (hovered) setHovered(null);
-          }}
-        >
-          <article className="w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20">
+        <div className="relative flex min-h-0 flex-1">
+          <div
+            ref={scrollRef}
+            className="min-w-0 flex-1 overflow-y-auto"
+            onScroll={() => {
+              if (hovered) setHovered(null);
+            }}
+          >
+            <article
+              ref={contentRef}
+              className="w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20"
+            >
             <input
               value={title}
               readOnly={readOnly}
@@ -778,14 +821,21 @@ export function NoteEditor({
                   setHovered({
                     claim,
                     x: Math.min(rect.left, window.innerWidth - 360),
-                    y: rect.bottom + 8,
+                    // Overlap the claim slightly so the pointer never crosses a dead gap.
+                    y: rect.bottom - 4,
                   });
+                  return;
                 }
+                // Grace period to reach the fixed tooltip (and its top hit pad).
+                hoverTimer.current = window.setTimeout(
+                  () => setHovered(null),
+                  400,
+                );
               }}
               onMouseLeave={() => {
                 hoverTimer.current = window.setTimeout(
                   () => setHovered(null),
-                  180,
+                  400,
                 );
               }}
             >
@@ -870,38 +920,55 @@ export function NoteEditor({
               </section>
             ) : null}
           </article>
+          </div>
+          {minimapEnabled ? (
+            <EditorMinimap
+              scrollRef={scrollRef}
+              contentRef={contentRef}
+              revision={minimapRevision}
+            />
+          ) : null}
         </div>
+
+        {editor ? <InlineChat editor={editor} /> : null}
 
         {hovered ? (
           <aside
-            className="fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] border border-[#333] bg-[#111] p-4 shadow-2xl"
+            className="fixed z-50 w-[min(20rem,calc(100vw-1.5rem))] pt-2"
             style={{ left: hovered.x, top: hovered.y }}
             onMouseEnter={() => {
               if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
             }}
-            onMouseLeave={() => setHovered(null)}
+            onMouseLeave={() => {
+              hoverTimer.current = window.setTimeout(
+                () => setHovered(null),
+                200,
+              );
+            }}
           >
-            <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              {hovered.claim.stale ? "Stale result" : hovered.claim.verdict}
-            </p>
-            <p className="text-xs leading-5 text-[#ddd]">
-              {hovered.claim.reason}
-            </p>
-            {hovered.claim.sources.length ? (
-              <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
-                {hovered.claim.sources.map((source) => (
-                  <a
-                    key={source.url}
-                    href={source.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block truncate text-[11px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
-                  >
-                    {source.title}
-                  </a>
-                ))}
-              </div>
-            ) : null}
+            <div className="border border-[#333] bg-[#111] p-4 shadow-2xl">
+              <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                {hovered.claim.stale ? "Stale result" : hovered.claim.verdict}
+              </p>
+              <p className="text-xs leading-5 text-[#ddd]">
+                {hovered.claim.reason}
+              </p>
+              {hovered.claim.sources.length ? (
+                <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
+                  {hovered.claim.sources.map((source) => (
+                    <a
+                      key={source.url}
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate text-[11px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                    >
+                      {source.title}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </aside>
         ) : null}
       </main>

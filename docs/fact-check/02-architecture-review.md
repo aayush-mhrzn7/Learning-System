@@ -7,7 +7,7 @@
 | UI | Workspace → Sidebar / NoteEditor / Search / Settings / Trash; TipTap + claim decorations; Activity NDJSON panel |
 | Auth | Email/password (scrypt), HMAC session cookie; no server session store / revocation |
 | API | Route handlers for notes, directories, tree, trash, search, checklist, auth, providers |
-| AI | `src/lib/ai.ts` — extract → Decisions gate → per-claim web judge; gaps = separate structured call |
+| AI | `src/lib/ai.ts` — sparse extract (≤8) → Decisions **P(likely wrong)** (+ context) → ≤5 context-packed web judges; gaps = separate structured call |
 | Providers | BYOK; **GPT only** enabled (`OpenRouter` code present but disabled) |
 | DB | Neon + Drizzle: users, directories, notes, claims, checklist_items, provider_credentials |
 
@@ -24,7 +24,7 @@ Committed `drizzle/0000_*.sql` predates users / BYOK. Auth tables may exist only
 
 ## Strengths
 
-- Product bet is already encoded: sparse incorrect underlines, skip writing-quality criticism, Decisions before paid web search.
+- Product bet is encoded in code: sparse incorrect underlines, likely-wrong gate + hard web/extract caps, context-packed judge, skip writing-quality criticism.
 - Small coherent codebase; streaming Activity UI makes the pipeline legible.
 - Soft-delete / trash restore and empty-overwrite guards are practical.
 - BYOK + no env OpenAI fallback matches the cost/privacy story.
@@ -37,7 +37,7 @@ Committed `drizzle/0000_*.sql` predates users / BYOK. Auth tables may exist only
 |-----|-------------------------------------|
 | **No tests / eval harness** | Prompt changes are guesswork; cannot measure precision of “only real falsehoods” |
 | **No observability / usage rows** | Cannot see spend, step latency, or which stage fails |
-| **No rate limits / spend caps** | BYOK can be burned by loops or a stolen cookie |
+| **No daily rate limits / spend caps** | Per-run web ≤5 helps; BYOK can still be burned by loops or a stolen cookie |
 | **Destructive full re-runs** | Wipe-all then re-insert; concurrent or timed-out runs lose good claims |
 | **No job/run_id lock** | UI disables one button; multi-tab still races |
 | **No incremental / cache** | Every publish re-pays extract + web for unchanged text |
@@ -57,7 +57,7 @@ These are product/ops blind spots that show up as “fact-check feels dumb” an
 3. **No topic / learning-goal anchor** on note or directory — gaps invent a syllabus from one truncated body.
 4. **No note-to-note links** — coverage across the tree is invisible; gaps re-ask for concepts already written elsewhere.
 5. **Thin provenance** — `{title, url}` only; no quote/snippet; hard to trust an `incorrect` mark.
-6. **No cost dashboard** — Decisions + per-claim web search feel expensive; you cannot prove the gate saves money.
+6. **No cost dashboard** — Decisions + capped web search still opaque; you cannot prove the gate saves money without `ai_usage`.
 7. **Honor-system checklist** — ticking “What’s missing” does not verify the note was updated.
 8. **Same model for extract, judge, and gaps** — nano is a poor curriculum reviewer and a risky web judge.
 

@@ -1,0 +1,13 @@
+---
+description: Git commits must have no co-author or Cursor trailers
+alwaysApply: true
+---
+
+# Git commit messages
+
+When creating or amending commits in this repo:
+
+- Do **not** add `Co-authored-by`, `Signed-off-by`, `Made-with`, or any other trailer.
+- Do **not** attribute commits to Cursor (or any AI tool) in the message body.
+- Message body is the subject (and optional human-written description) only.
+- If the environment injects a Cursor/`Co-authored-by` trailer, strip it before pushing (e.g. soft-reset + `git commit-tree`, or amend to a clean message). Never leave that trailer on `main`.

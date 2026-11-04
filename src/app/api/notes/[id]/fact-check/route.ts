@@ -5,7 +5,9 @@ import {
   decideClaims,
   extractClaims,
   judgeClaim,
+  localClaimContext,
   mapPool,
+  MAX_WEB_JUDGES,
   shouldWebCheckClaim,
 } from "@/lib/ai";
 import { requireUserId } from "@/lib/auth";
@@ -77,7 +79,12 @@ export async function POST(_request: Request, context: Context) {
         }
 
         send({ type: "scoring", total: extracted.length });
-        const decided = await decideClaims(credentials, extracted);
+        const decided = await decideClaims(credentials, extracted, noteText);
+        const toCheck = decided
+          .filter((claim) => shouldWebCheckClaim(claim.score))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, MAX_WEB_JUDGES);
+        const webTexts = new Set(toCheck.map((claim) => claim.text));
         for (const [index, claim] of decided.entries()) {
           send({
             type: "scored",
@@ -85,12 +92,9 @@ export async function POST(_request: Request, context: Context) {
             total: decided.length,
             text: claim.text,
             score: claim.score,
-            check: shouldWebCheckClaim(claim.score),
+            check: webTexts.has(claim.text),
           });
         }
-        const toCheck = decided.filter((claim) =>
-          shouldWebCheckClaim(claim.score),
-        );
         send({
           type: "start",
           total: toCheck.length,
@@ -101,7 +105,11 @@ export async function POST(_request: Request, context: Context) {
         await mapPool(toCheck, JUDGE_CONCURRENCY, async ({ text, score }) => {
           send({ type: "checking", text, score });
           try {
-            const verdict = await judgeClaim(credentials, text);
+            const verdict = await judgeClaim(
+              credentials,
+              text,
+              localClaimContext(noteText, text),
+            );
             const [claim] = await db
               .insert(claims)
               .values({

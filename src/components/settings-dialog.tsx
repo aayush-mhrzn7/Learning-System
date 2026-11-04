@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot } from "lucide-react";
+import { Bot, PanelRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -12,12 +12,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  readMinimapEnabled,
+  writeMinimapEnabled,
+} from "@/lib/editor-preferences";
+import {
   isEnabledProviderId,
   PROVIDER_DEFAULTS,
   PROVIDER_IDS,
   type ProviderId,
 } from "@/lib/providers";
 import { cn } from "@/lib/utils";
+
+type SettingsSection = "providers" | "editor";
 
 type ProviderView = {
   enabled: boolean;
@@ -182,6 +188,8 @@ export function SettingsDialog({
   );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [section, setSection] = useState<SettingsSection>("providers");
+  const [minimapEnabled, setMinimapEnabled] = useState(true);
   const [statuses, setStatuses] = useState<
     Record<ProviderId, ConnectionStatus>
   >({
@@ -222,6 +230,11 @@ export function SettingsDialog({
       });
     }
   }
+
+  useEffect(() => {
+    if (!open) return;
+    setMinimapEnabled(readMinimapEnabled());
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -349,23 +362,73 @@ export function SettingsDialog({
           <p className="mb-3 px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-500">
             Settings
           </p>
-          <button
-            type="button"
-            className="flex h-8 items-center gap-2 rounded-md bg-white/10 px-2.5 text-left text-xs text-zinc-100"
-          >
-            <Bot className="size-3.5 shrink-0" />
-            Providers
-          </button>
+          <div className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={() => setSection("providers")}
+              className={cn(
+                "flex h-8 items-center gap-2 rounded-md px-2.5 text-left text-xs",
+                section === "providers"
+                  ? "bg-white/10 text-zinc-100"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200",
+              )}
+            >
+              <Bot className="size-3.5 shrink-0" />
+              Providers
+            </button>
+            <button
+              type="button"
+              onClick={() => setSection("editor")}
+              className={cn(
+                "flex h-8 items-center gap-2 rounded-md px-2.5 text-left text-xs",
+                section === "editor"
+                  ? "bg-white/10 text-zinc-100"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200",
+              )}
+            >
+              <PanelRight className="size-3.5 shrink-0" />
+              Editor
+            </button>
+          </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="border-b border-white/10 px-5 py-3">
             <p className="text-xs text-zinc-500">
               Settings <span className="text-zinc-700">/</span>{" "}
-              <span className="text-zinc-300">Providers</span>
+              <span className="text-zinc-300">
+                {section === "providers" ? "Providers" : "Editor"}
+              </span>
             </p>
           </div>
 
+          {section === "editor" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <h2 className="mb-1 text-sm font-medium tracking-tight text-zinc-50">
+                Editor
+              </h2>
+              <p className="mb-6 text-xs text-zinc-500">
+                Layout preferences for the note workspace.
+              </p>
+              <div className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-black/20 px-4 py-3">
+                <div>
+                  <p className="text-xs text-zinc-100">Document minimap</p>
+                  <p className="mt-0.5 text-[11px] leading-5 text-zinc-500">
+                    Show the viewport overview and claim markers on the right
+                    edge of the note.
+                  </p>
+                </div>
+                <Switch
+                  size="md"
+                  checked={minimapEnabled}
+                  onCheckedChange={(checked) => {
+                    setMinimapEnabled(checked);
+                    writeMinimapEnabled(checked);
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
           <div className="flex min-h-0 flex-1">
             <div className="flex w-56 shrink-0 flex-col border-r border-white/10 p-3">
               <p className="mb-2 px-2 text-xs font-medium text-zinc-200">
@@ -559,6 +622,7 @@ export function SettingsDialog({
               )}
             </div>
           </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

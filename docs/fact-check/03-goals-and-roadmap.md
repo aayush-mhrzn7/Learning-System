@@ -23,12 +23,13 @@ Success looks like:
 | 0.2 | **Golden eval set** (20–50 fixtures): must-flag / must-not-flag / gaps eligible. Offline JSON + `bun run eval` (or script). | Prompt change can fail an objective check |
 | 0.3 | **Prompt version** constants stored on claim rows / gap batches | Regressions attributable |
 | 0.4 | **Claim feedback** on hover: dismiss / still wrong / fixed → DB; suppress dismissed text until claim text changes | You can clear noise without waiting for a perfect model |
-| 0.5 | **Judge with note context** (±1–2 paragraphs); policy: no `incorrect` without checkable proposition + usable evidence | Context-dependent fragments stop becoming red |
+| 0.5 | **Judge with note context** (±1–2 paragraphs); policy: no `incorrect` without usable evidence | **Done** — `localClaimContext` + sourceless `incorrect` → `unsure`. Still tune prompts / eval. |
+| 0.5b | **Likely-wrong Decisions gate** + hard caps (`MAX_EXTRACTED_CLAIMS=8`, `MAX_WEB_JUDGES=5`) | **Done** — web only for high P(wrong), top-K. Extract still prompt-only (no kinds). |
 | 0.6 | **Structured extract kinds** + hard drop before Decisions | Taxonomy in [01-current-flow.md](./01-current-flow.md) |
-| 0.7 | **BYOK soft caps** (max web judges / day) + confirm when `toCheck` is large | Accidental spend bounded |
+| 0.7 | **BYOK soft caps** (max web judges / day) + confirm when `toCheck` is large | Partial — per-run max 5 web; daily / confirm UI still open |
 | 0.8 | **Reconcile Drizzle migrations** with `users` / BYOK schema | Fresh migrate = production truth |
 
-Ship order suggestion: **0.5 + 0.6** (quality), then **0.1** (safety), then **0.2–0.4** (measurement/feedback), then **0.7–0.8**.
+Ship order suggestion: **0.6** (kinds) next for quality, then **0.1** (safety), then **0.2–0.4** (measurement/feedback), then finish **0.7–0.8**.
 
 ---
 
@@ -40,7 +41,7 @@ Ship order suggestion: **0.5 + 0.6** (quality), then **0.1** (safety), then **0.
 |------|------|
 | 1.1 | **Content / claim hashes** — incremental fact-check; keep stable verdicts; only extract/judge dirty spans |
 | 1.2 | **Decouple clean re-publish** from full fact-check (run if `editedSincePublish` / incomplete / hash changed / user opts in) |
-| 1.3 | **Stricter gate** — `checkable ∧ consequential`; raise threshold (e.g. 0.85–0.9) after eval |
+| 1.3 | **Tune likely-wrong gate** after eval (threshold / top-K); optional dual predicate `checkable ∧ consequential` if kinds exist |
 | 1.4 | **Batch or cache web judges** — multi-claim Responses call and/or verdict cache by normalized claim+context |
 | 1.5 | **Gaps: save-before-analyze**; richer structured gap object (`concept`, `relation`, `self_check`, `gap_type`); server denylist for vague lines |
 | 1.6 | **Gaps reconcile** — stale/covered items instead of append-forever; optional topic/learning-goal field on note or directory |
