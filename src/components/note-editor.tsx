@@ -1,6 +1,7 @@
 "use client";
 
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import Image from "@tiptap/extension-image";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
@@ -167,6 +168,13 @@ export function NoteEditor({
         },
       }),
       CodeBlockLowlight.configure({ lowlight }),
+      // shortcut: base64 images bloat note JSON; move to object storage if notes get heavy
+      Image.configure({
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "learning-editor-image",
+        },
+      }),
       ClaimFlags,
     ],
     content: { type: "doc", content: [{ type: "paragraph" }] },
@@ -175,6 +183,24 @@ export function NoteEditor({
         class: "learning-editor",
         spellcheck: "true",
         "data-font-size": "md",
+      },
+      handlePaste(view, event) {
+        const items = Array.from(event.clipboardData?.items ?? []);
+        const imageItem = items.find((item) => item.type.startsWith("image/"));
+        if (!imageItem) return false;
+        const file = imageItem.getAsFile();
+        const imageType = view.state.schema.nodes.image;
+        if (!file || !imageType) return false;
+        event.preventDefault();
+        const reader = new FileReader();
+        reader.onload = () => {
+          const src = typeof reader.result === "string" ? reader.result : null;
+          if (!src) return;
+          const node = imageType.create({ src });
+          view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
+        };
+        reader.readAsDataURL(file);
+        return true;
       },
     },
     onUpdate: () => {
@@ -489,7 +515,7 @@ export function NoteEditor({
                 typeof event.total === "number"
                   ? `gpt-6-luna · ${event.total}`
                   : "gpt-6-luna…",
-              log: "+ OpenAI Decisions gpt-6-luna (likely-wrong > 0.8)",
+              log: "+ OpenAI Decisions gpt-6-luna (likely-wrong > 0.7)",
             });
           }
 
@@ -1041,42 +1067,31 @@ export function NoteEditor({
               checking claims.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
+          <DialogFooter className="flex-row gap-2 sm:justify-stretch">
             <Button
               type="button"
               size="sm"
-              className="w-full"
+              className="min-w-0 flex-1"
               disabled={pipelineBusy}
               onClick={() => {
                 setPublishDialogOpen(false);
                 void runPipeline(publishKind);
               }}
             >
-              Run fact-check
+              Fact Check + Publish
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="w-full"
+              className="min-w-0 flex-1"
               disabled={pipelineBusy}
               onClick={() => {
                 setPublishDialogOpen(false);
                 void runPipeline(publishKind, { skipFactCheck: true });
               }}
             >
-              {payload.note.status === "published"
-                ? "Re-publish as-is"
-                : "Publish as-is"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-full"
-              onClick={() => setPublishDialogOpen(false)}
-            >
-              Cancel
+              Publish as is
             </Button>
           </DialogFooter>
         </DialogContent>

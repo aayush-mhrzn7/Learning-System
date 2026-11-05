@@ -47,7 +47,7 @@ export const editorDocumentSchema = z.object({
 export const noteUpdateSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
-    directoryId: z.uuid().optional(),
+    directoryId: z.uuid().nullable().optional(),
     content: editorDocumentSchema.optional(),
     plainText: z.string().max(500_000).optional(),
   })

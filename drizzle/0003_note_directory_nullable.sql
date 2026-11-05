@@ -1,0 +1,1 @@
+ALTER TABLE "notes" ALTER COLUMN "directory_id" DROP NOT NULL;

@@ -56,6 +56,7 @@ const SIDEBAR_MIN_WIDTH = 260;
 const SIDEBAR_MAX_WIDTH = 520;
 const SIDEBAR_DEFAULT_WIDTH = 340;
 const TREE_DRAG_MIME = "application/x-learning-tree-item";
+const ROOT_DROP_ID = "__root__";
 
 type TreeDragPayload =
   | { kind: "note"; id: string }
@@ -114,7 +115,7 @@ type EditAction =
   | {
       kind: "note";
       mode: "create" | "rename";
-      directoryId: string;
+      directoryId: string | null;
       id?: string;
       value: string;
       noteKind?: NoteKind;
@@ -144,7 +145,20 @@ export function Sidebar(props: SidebarProps) {
   const [draggingItem, setDraggingItem] = useState<TreeDragPayload | null>(
     null,
   );
+  // Sync ref so dragOver can call preventDefault before React re-renders.
+  const draggingItemRef = useRef<TreeDragPayload | null>(null);
   const dragging = useRef(false);
+
+  function beginTreeDrag(item: TreeDragPayload) {
+    draggingItemRef.current = item;
+    setDraggingItem(item);
+  }
+
+  function endTreeDrag() {
+    draggingItemRef.current = null;
+    setDraggingItem(null);
+    setDropTargetId(null);
+  }
 
   useEffect(() => {
     setWidth(readSidebarWidth());
@@ -256,10 +270,64 @@ export function Sidebar(props: SidebarProps) {
     return !descendantDirectoryIds(drag.id).has(targetDirectoryId);
   }
 
+  function canDropOnRoot(drag: TreeDragPayload) {
+    if (drag.kind === "note") {
+      const note = props.tree.notes.find((item) => item.id === drag.id);
+      return Boolean(note && note.directoryId !== null);
+    }
+    const directory = props.tree.directories.find((item) => item.id === drag.id);
+    return Boolean(directory && directory.parentId !== null);
+  }
+
   async function moveTreeItem(
     drag: TreeDragPayload,
-    targetDirectoryId: string,
+    targetDirectoryId: string | null,
   ) {
+    if (targetDirectoryId === null) {
+      if (!canDropOnRoot(drag)) return;
+      const previous = props.tree;
+
+      if (drag.kind === "note") {
+        props.onOptimisticTree((tree) => ({
+          ...tree,
+          notes: tree.notes.map((note) =>
+            note.id === drag.id ? { ...note, directoryId: null } : note,
+          ),
+        }));
+        try {
+          const response = await fetch(`/api/notes/${drag.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ directoryId: null }),
+          });
+          if (!response.ok) throw new Error();
+        } catch {
+          rollback(previous, "Could not move note");
+        }
+        return;
+      }
+
+      props.onOptimisticTree((tree) => ({
+        ...tree,
+        directories: tree.directories.map((directory) =>
+          directory.id === drag.id
+            ? { ...directory, parentId: null }
+            : directory,
+        ),
+      }));
+      try {
+        const response = await fetch(`/api/directories/${drag.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parentId: null }),
+        });
+        if (!response.ok) throw new Error();
+      } catch {
+        rollback(previous, "Could not move directory");
+      }
+      return;
+    }
+
     if (!canDropOnDirectory(drag, targetDirectoryId)) return;
     const previous = props.tree;
     toggleOpen(targetDirectoryId);
@@ -341,7 +409,9 @@ export function Sidebar(props: SidebarProps) {
         directories: tree.directories.filter(
           (directory) => !removed.has(directory.id),
         ),
-        notes: tree.notes.filter((note) => !removed.has(note.directoryId)),
+        notes: tree.notes.filter(
+          (note) => !note.directoryId || !removed.has(note.directoryId),
+        ),
       }));
     }
 
@@ -414,10 +484,12 @@ export function Sidebar(props: SidebarProps) {
 
       if (editAction.kind === "note" && editAction.mode === "create") {
         const noteKind = editAction.noteKind ?? "writing";
+        const directoryId = editAction.directoryId;
+        if (!directoryId) throw new Error("directory required");
         const tempId = crypto.randomUUID();
         const optimistic: NoteSummary = {
           id: tempId,
-          directoryId: editAction.directoryId,
+          directoryId,
           title: editAction.value.trim(),
           kind: noteKind,
           status: "draft",
@@ -427,13 +499,13 @@ export function Sidebar(props: SidebarProps) {
           ...tree,
           notes: [...tree.notes, optimistic],
         }));
-        toggleOpen(editAction.directoryId);
+        toggleOpen(directoryId);
 
         const response = await fetch("/api/notes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directoryId: editAction.directoryId,
+            directoryId,
             title: editAction.value,
             kind: noteKind,
           }),
@@ -514,6 +586,14 @@ export function Sidebar(props: SidebarProps) {
         .filter((directory) => !directory.parentId)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [props.tree.directories],
+  );
+
+  const rootNotes = useMemo(
+    () =>
+      props.tree.notes
+        .filter((note) => note.directoryId === null)
+        .sort((a, b) => a.title.localeCompare(b.title)),
+    [props.tree.notes],
   );
 
   const currentDirectoryId = useMemo(() => {
@@ -704,82 +784,105 @@ export function Sidebar(props: SidebarProps) {
 
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div
-            className="flex-1 overflow-y-auto px-2 py-4"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) {
-                setSelectedDirectoryId(null);
-              }
-            }}
-          >
-            {roots.length ? (
-              roots.map((directory) => (
-                <DirectoryNode
-                  key={directory.id}
-                  directory={directory}
-                  directories={props.tree.directories}
-                  notes={props.tree.notes}
-                  expanded={expanded}
-                  selectedDirectoryId={selectedDirectoryId}
-                  selectedNoteId={props.selectedNoteId}
-                  dropTargetId={dropTargetId}
-                  draggingItem={draggingItem}
-                  onToggle={toggle}
-                  onEnsureExpanded={toggleOpen}
-                  onSelectDirectory={setSelectedDirectoryId}
-                  onCreateDirectory={(parentId) =>
-                    startCreateDirectory(parentId)
-                  }
-                  onCreateNote={(directoryId) => startCreateNote(directoryId)}
-                  onCreateVisualizeNote={(directoryId) =>
-                    startCreateNote(directoryId, "visualize")
-                  }
-                  onRenameDirectory={(directory) =>
-                    setEditAction({
-                      kind: "directory",
-                      mode: "rename",
-                      parentId: directory.parentId,
-                      id: directory.id,
-                      value: directory.name,
-                    })
-                  }
-                  onRenameNote={(note) =>
-                    setEditAction({
-                      kind: "note",
-                      mode: "rename",
-                      directoryId: note.directoryId,
-                      id: note.id,
-                      value: note.title,
-                    })
-                  }
-                  onDeleteDirectory={(directory) =>
-                    openDelete({
-                      kind: "directory",
-                      id: directory.id,
-                      name: directory.name,
-                    })
-                  }
-                  onDeleteNote={(note) =>
-                    openDelete({
-                      kind: "note",
-                      id: note.id,
-                      name: note.title,
-                    })
-                  }
-                  onOpenNote={(id) => {
-                    setSelectedDirectoryId(null);
-                    props.onOpenNote(id);
-                  }}
-                  onDragItemStart={setDraggingItem}
-                  onDragItemEnd={() => {
-                    setDraggingItem(null);
-                    setDropTargetId(null);
-                  }}
-                  canDropOnDirectory={canDropOnDirectory}
-                  onDropTargetChange={setDropTargetId}
-                  onDropOnDirectory={moveTreeItem}
-                />
-              ))
+          <div className="flex flex-1 flex-col overflow-y-auto px-2 py-4">
+            {roots.length || rootNotes.length ? (
+              <>
+                {roots.map((directory) => (
+                  <DirectoryNode
+                    key={directory.id}
+                    directory={directory}
+                    directories={props.tree.directories}
+                    notes={props.tree.notes}
+                    expanded={expanded}
+                    selectedDirectoryId={selectedDirectoryId}
+                    selectedNoteId={props.selectedNoteId}
+                    dropTargetId={dropTargetId}
+                    getDraggingItem={() => draggingItemRef.current}
+                    onToggle={toggle}
+                    onEnsureExpanded={toggleOpen}
+                    onSelectDirectory={setSelectedDirectoryId}
+                    onCreateDirectory={(parentId) =>
+                      startCreateDirectory(parentId)
+                    }
+                    onCreateNote={(directoryId) =>
+                      startCreateNote(directoryId)
+                    }
+                    onCreateVisualizeNote={(directoryId) =>
+                      startCreateNote(directoryId, "visualize")
+                    }
+                    onRenameDirectory={(directory) =>
+                      setEditAction({
+                        kind: "directory",
+                        mode: "rename",
+                        parentId: directory.parentId,
+                        id: directory.id,
+                        value: directory.name,
+                      })
+                    }
+                    onRenameNote={(note) =>
+                      setEditAction({
+                        kind: "note",
+                        mode: "rename",
+                        directoryId: note.directoryId,
+                        id: note.id,
+                        value: note.title,
+                      })
+                    }
+                    onDeleteDirectory={(directory) =>
+                      openDelete({
+                        kind: "directory",
+                        id: directory.id,
+                        name: directory.name,
+                      })
+                    }
+                    onDeleteNote={(note) =>
+                      openDelete({
+                        kind: "note",
+                        id: note.id,
+                        name: note.title,
+                      })
+                    }
+                    onOpenNote={(id) => {
+                      setSelectedDirectoryId(null);
+                      props.onOpenNote(id);
+                    }}
+                    onDragItemStart={beginTreeDrag}
+                    onDragItemEnd={endTreeDrag}
+                    canDropOnDirectory={canDropOnDirectory}
+                    onDropTargetChange={setDropTargetId}
+                    onDropOnDirectory={moveTreeItem}
+                  />
+                ))}
+                {rootNotes.map((note) => (
+                  <TreeNoteRow
+                    key={note.id}
+                    note={note}
+                    selected={props.selectedNoteId === note.id}
+                    onOpen={() => {
+                      setSelectedDirectoryId(null);
+                      props.onOpenNote(note.id);
+                    }}
+                    onRename={() =>
+                      setEditAction({
+                        kind: "note",
+                        mode: "rename",
+                        directoryId: note.directoryId,
+                        id: note.id,
+                        value: note.title,
+                      })
+                    }
+                    onDelete={() =>
+                      openDelete({
+                        kind: "note",
+                        id: note.id,
+                        name: note.title,
+                      })
+                    }
+                    onDragStart={beginTreeDrag}
+                    onDragEnd={endTreeDrag}
+                  />
+                ))}
+              </>
             ) : (
               <button
                 onClick={() => startCreateDirectory(null)}
@@ -789,6 +892,40 @@ export function Sidebar(props: SidebarProps) {
                 New directory
               </button>
             )}
+            {/* Empty sidebar space — drop here to move to root (no labeled strip). */}
+            <div
+              className={`min-h-8 flex-1 ${
+                dropTargetId === ROOT_DROP_ID ? "rounded-sm bg-[#1f2a1f]/50" : ""
+              }`}
+              onClick={() => setSelectedDirectoryId(null)}
+              onDragOver={(event) => {
+                const drag = draggingItemRef.current;
+                if (!drag || !canDropOnRoot(drag)) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                if (dropTargetId !== ROOT_DROP_ID) {
+                  setDropTargetId(ROOT_DROP_ID);
+                }
+              }}
+              onDragLeave={(event) => {
+                if (
+                  event.currentTarget.contains(
+                    event.relatedTarget as Node | null,
+                  )
+                ) {
+                  return;
+                }
+                if (dropTargetId === ROOT_DROP_ID) setDropTargetId(null);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const drag =
+                  readTreeDrag(event) ?? draggingItemRef.current;
+                setDropTargetId(null);
+                if (!drag || !canDropOnRoot(drag)) return;
+                void moveTreeItem(drag, null);
+              }}
+            />
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -1004,7 +1141,7 @@ type DirectoryNodeProps = {
   selectedDirectoryId: string | null;
   selectedNoteId: string | null;
   dropTargetId: string | null;
-  draggingItem: TreeDragPayload | null;
+  getDraggingItem: () => TreeDragPayload | null;
   onToggle: (id: string) => void;
   onEnsureExpanded: (id: string) => void;
   onSelectDirectory: (id: string) => void;
@@ -1029,6 +1166,76 @@ type DirectoryNodeProps = {
   ) => void | Promise<void>;
 };
 
+function startTreeDragEvent(
+  event: React.DragEvent,
+  item: TreeDragPayload,
+  onStart: (item: TreeDragPayload) => void,
+) {
+  onStart(item);
+  const payload = JSON.stringify(item);
+  event.dataTransfer.setData(TREE_DRAG_MIME, payload);
+  event.dataTransfer.setData("text/plain", payload);
+  event.dataTransfer.effectAllowed = "move";
+}
+
+function TreeNoteRow({
+  note,
+  selected,
+  onOpen,
+  onRename,
+  onDelete,
+  onDragStart,
+  onDragEnd,
+}: {
+  note: NoteSummary;
+  selected: boolean;
+  onOpen: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  onDragStart: (item: TreeDragPayload) => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          draggable
+          onDragStart={(event) =>
+            startTreeDragEvent(event, { kind: "note", id: note.id }, onDragStart)
+          }
+          onDragEnd={onDragEnd}
+          onClick={onOpen}
+          className={`sidebar-row w-full truncate ${
+            selected
+              ? "bg-[#171717] text-foreground"
+              : "text-muted-foreground hover:bg-[#111] hover:text-foreground"
+          }`}
+        >
+          {note.kind === "visualize" ? (
+            <DiagramFlowHorizontal size={13} className="shrink-0 opacity-60" />
+          ) : (
+            <FileText size={13} className="shrink-0 opacity-60" />
+          )}
+          <span className="truncate">{note.title}</span>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onRename}>
+          <Pencil size={14} />
+          Rename
+        </ContextMenuItem>
+        <ContextMenuItem
+          className="text-red-400 data-[highlighted]:text-red-300"
+          onSelect={onDelete}
+        >
+          <Trash2 size={14} />
+          Move to Trash
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 function DirectoryNode(props: DirectoryNodeProps) {
   const open = props.expanded.has(props.directory.id);
   const selected = props.selectedDirectoryId === props.directory.id;
@@ -1040,16 +1247,8 @@ function DirectoryNode(props: DirectoryNodeProps) {
     .filter((note) => note.directoryId === props.directory.id)
     .sort((a, b) => a.title.localeCompare(b.title));
 
-  function startDrag(event: React.DragEvent, item: TreeDragPayload) {
-    props.onDragItemStart(item);
-    const payload = JSON.stringify(item);
-    event.dataTransfer.setData(TREE_DRAG_MIME, payload);
-    event.dataTransfer.setData("text/plain", payload);
-    event.dataTransfer.effectAllowed = "move";
-  }
-
   function handleDirectoryDragOver(event: React.DragEvent) {
-    const drag = props.draggingItem;
+    const drag = props.getDraggingItem();
     if (!drag) return;
     if (!props.canDropOnDirectory(drag, props.directory.id)) return;
     event.preventDefault();
@@ -1064,23 +1263,24 @@ function DirectoryNode(props: DirectoryNodeProps) {
   function handleDirectoryDrop(event: React.DragEvent) {
     event.preventDefault();
     event.stopPropagation();
-    const drag = readTreeDrag(event) ?? props.draggingItem;
+    const drag = readTreeDrag(event) ?? props.getDraggingItem();
     props.onDropTargetChange(null);
     if (!drag) return;
     void props.onDropOnDirectory(drag, props.directory.id);
   }
 
   return (
-    <div>
+    <div data-tree-branch>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
             draggable
             onDragStart={(event) =>
-              startDrag(event, {
-                kind: "directory",
-                id: props.directory.id,
-              })
+              startTreeDragEvent(
+                event,
+                { kind: "directory", id: props.directory.id },
+                props.onDragItemStart,
+              )
             }
             onDragEnd={props.onDragItemEnd}
             onDragOver={handleDirectoryDragOver}
@@ -1184,43 +1384,16 @@ function DirectoryNode(props: DirectoryNodeProps) {
             />
           ))}
           {notes.map((note) => (
-            <ContextMenu key={note.id}>
-              <ContextMenuTrigger asChild>
-                <button
-                  draggable
-                  onDragStart={(event) =>
-                    startDrag(event, { kind: "note", id: note.id })
-                  }
-                  onDragEnd={props.onDragItemEnd}
-                  onClick={() => props.onOpenNote(note.id)}
-                  className={`sidebar-row w-full truncate ${
-                    props.selectedNoteId === note.id
-                      ? "bg-[#171717] text-foreground"
-                      : "text-muted-foreground hover:bg-[#111] hover:text-foreground"
-                  }`}
-                >
-                  {note.kind === "visualize" ? (
-                    <DiagramFlowHorizontal size={13} className="shrink-0 opacity-60" />
-                  ) : (
-                    <FileText size={13} className="shrink-0 opacity-60" />
-                  )}
-                  <span className="truncate">{note.title}</span>
-                </button>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onSelect={() => props.onRenameNote(note)}>
-                  <Pencil size={14} />
-                  Rename
-                </ContextMenuItem>
-                <ContextMenuItem
-                  className="text-red-400 data-[highlighted]:text-red-300"
-                  onSelect={() => props.onDeleteNote(note)}
-                >
-                  <Trash2 size={14} />
-                  Move to Trash
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
+            <TreeNoteRow
+              key={note.id}
+              note={note}
+              selected={props.selectedNoteId === note.id}
+              onOpen={() => props.onOpenNote(note.id)}
+              onRename={() => props.onRenameNote(note)}
+              onDelete={() => props.onDeleteNote(note)}
+              onDragStart={props.onDragItemStart}
+              onDragEnd={props.onDragItemEnd}
+            />
           ))}
         </div>
       ) : null}

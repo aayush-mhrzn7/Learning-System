@@ -70,7 +70,7 @@ export async function PATCH(request: Request, context: Context) {
     return Response.json({ error: "Note not found" }, { status: 404 });
   }
 
-  if (body.data.directoryId !== undefined) {
+  if (body.data.directoryId !== undefined && body.data.directoryId !== null) {
     const [directory] = await db
       .select({ id: directories.id })
       .from(directories)

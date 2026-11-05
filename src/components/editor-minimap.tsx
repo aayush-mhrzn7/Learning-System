@@ -25,30 +25,43 @@ type Viewport = {
   height: number;
 };
 
-/** Height of title + editor body only — ignores article bottom padding. */
-function measureWrittenHeight(
-  content: HTMLElement,
-  scrollTop: number,
-): number {
+/** Y of `el` relative to the top of `content` (scroll-independent). */
+function offsetInContent(el: Element, content: HTMLElement) {
   const contentTop = content.getBoundingClientRect().top;
+  const rect = el.getBoundingClientRect();
+  return {
+    top: rect.top - contentTop,
+    bottom: rect.bottom - contentTop,
+    height: rect.height,
+  };
+}
+
+/** Distance from the scrollport's content origin to the article top. */
+function contentOrigin(scroll: HTMLElement, content: HTMLElement) {
+  return (
+    content.getBoundingClientRect().top -
+    scroll.getBoundingClientRect().top +
+    scroll.scrollTop
+  );
+}
+
+/** Height of title + editor body only — ignores article bottom padding. */
+function measureWrittenHeight(content: HTMLElement): number {
   let bottom = 0;
 
   const title = content.querySelector("input");
   if (title) {
-    const rect = title.getBoundingClientRect();
-    bottom = Math.max(bottom, rect.bottom - contentTop + scrollTop);
+    bottom = Math.max(bottom, offsetInContent(title, content).bottom);
   }
 
   const editor = content.querySelector(".learning-editor");
   if (editor) {
     const children = editor.querySelectorAll(":scope > *");
     if (children.length === 0) {
-      const rect = editor.getBoundingClientRect();
-      bottom = Math.max(bottom, rect.bottom - contentTop + scrollTop);
+      bottom = Math.max(bottom, offsetInContent(editor, content).bottom);
     } else {
       children.forEach((node) => {
-        const rect = (node as HTMLElement).getBoundingClientRect();
-        bottom = Math.max(bottom, rect.bottom - contentTop + scrollTop);
+        bottom = Math.max(bottom, offsetInContent(node, content).bottom);
       });
     }
   }
@@ -77,18 +90,18 @@ export function EditorMinimap({
     if (!scroll || !content) return;
 
     const viewHeight = Math.max(scroll.clientHeight, 1);
-    const writtenHeight = measureWrittenHeight(content, scroll.scrollTop);
+    const writtenHeight = measureWrittenHeight(content);
+    const origin = contentOrigin(scroll, content);
     setMapFill(Math.min(1, writtenHeight / viewHeight));
 
-    const contentTop = content.getBoundingClientRect().top;
     const nextBlocks: BlockMark[] = [];
 
     const title = content.querySelector("input");
     if (title && title.value.trim()) {
-      const rect = title.getBoundingClientRect();
+      const { top, height } = offsetInContent(title, content);
       nextBlocks.push({
-        top: (rect.top - contentTop + scroll.scrollTop) / writtenHeight,
-        height: Math.max(rect.height / writtenHeight, 0.02),
+        top: top / writtenHeight,
+        height: Math.max(height / writtenHeight, 0.02),
         width: Math.min(0.95, 0.4 + title.value.trim().length / 40),
         kind: "heading",
       });
@@ -102,10 +115,7 @@ export function EditorMinimap({
         if (!(node.textContent ?? "").trim() && !node.querySelector("img, br")) {
           return;
         }
-        const rect = node.getBoundingClientRect();
-        const top =
-          (rect.top - contentTop + scroll.scrollTop) / writtenHeight;
-        const height = Math.max(rect.height / writtenHeight, 0.01);
+        const { top, height } = offsetInContent(node, content);
         const textLen = (node.textContent ?? "").trim().length;
         const kind = node.matches("h1, h2, h3")
           ? "heading"
@@ -113,8 +123,8 @@ export function EditorMinimap({
             ? "code"
             : "text";
         nextBlocks.push({
-          top,
-          height,
+          top: top / writtenHeight,
+          height: Math.max(height / writtenHeight, 0.01),
           width: Math.min(0.95, 0.25 + textLen / 180),
           kind,
         });
@@ -124,18 +134,18 @@ export function EditorMinimap({
     content.querySelectorAll<HTMLElement>("[data-claim-id]").forEach((node) => {
       const id = node.dataset.claimId;
       if (!id) return;
-      const rect = node.getBoundingClientRect();
+      const { top, height } = offsetInContent(node, content);
       nextClaims.push({
         id,
-        top: (rect.top - contentTop + scroll.scrollTop) / writtenHeight,
-        height: Math.max(rect.height / writtenHeight, 0.02),
+        top: top / writtenHeight,
+        height: Math.max(height / writtenHeight, 0.02),
       });
     });
 
     setBlocks(nextBlocks);
     setClaims(nextClaims);
     setViewport({
-      top: scroll.scrollTop / writtenHeight,
+      top: Math.max(0, (scroll.scrollTop - origin) / writtenHeight),
       height: Math.min(1, viewHeight / writtenHeight),
     });
     setReady(true);
@@ -150,10 +160,11 @@ export function EditorMinimap({
     const onScroll = () => {
       const el = contentRef.current;
       if (!el) return;
-      const writtenHeight = measureWrittenHeight(el, scroll.scrollTop);
+      const writtenHeight = measureWrittenHeight(el);
       const viewHeight = Math.max(scroll.clientHeight, 1);
+      const origin = contentOrigin(scroll, el);
       setViewport({
-        top: scroll.scrollTop / writtenHeight,
+        top: Math.max(0, (scroll.scrollTop - origin) / writtenHeight),
         height: Math.min(1, viewHeight / writtenHeight),
       });
     };
@@ -171,20 +182,38 @@ export function EditorMinimap({
     };
   }, [contentRef, measure, revision, scrollRef]);
 
-  function jumpTo(clientY: number, target: HTMLElement) {
+  function scrollToContentY(contentY: number) {
     const scroll = scrollRef.current;
     const content = contentRef.current;
     if (!scroll || !content) return;
+    const origin = contentOrigin(scroll, content);
+    scroll.scrollTo({
+      top: origin + contentY - scroll.clientHeight / 2,
+      behavior: "smooth",
+    });
+  }
+
+  function jumpToRatio(clientY: number, target: HTMLElement) {
+    const content = contentRef.current;
+    if (!content) return;
     const rect = target.getBoundingClientRect();
     const ratio = Math.min(
       1,
       Math.max(0, (clientY - rect.top) / Math.max(rect.height, 1)),
     );
-    const writtenHeight = measureWrittenHeight(content, scroll.scrollTop);
-    scroll.scrollTo({
-      top: ratio * writtenHeight - scroll.clientHeight / 2,
-      behavior: "smooth",
-    });
+    scrollToContentY(ratio * measureWrittenHeight(content));
+  }
+
+  function jumpToClaim(claimId: string) {
+    const scroll = scrollRef.current;
+    const content = contentRef.current;
+    if (!scroll || !content) return;
+    const node = content.querySelector<HTMLElement>(
+      `[data-claim-id="${CSS.escape(claimId)}"]`,
+    );
+    if (!node) return;
+    const { top, height } = offsetInContent(node, content);
+    scrollToContentY(top + height / 2);
   }
 
   if (!ready) return null;
@@ -199,7 +228,7 @@ export function EditorMinimap({
         style={{
           height: `max(2.5rem, calc(${mapFill * 100}% - 0.25rem))`,
         }}
-        onClick={(event) => jumpTo(event.clientY, event.currentTarget)}
+        onClick={(event) => jumpToRatio(event.clientY, event.currentTarget)}
       >
         <div className="pointer-events-none absolute inset-1">
           {blocks.map((block, index) => (
@@ -219,16 +248,6 @@ export function EditorMinimap({
               }}
             />
           ))}
-          {claims.map((claim) => (
-            <div
-              key={claim.id}
-              className="absolute right-0 w-1 rounded-sm bg-red-500"
-              style={{
-                top: `${claim.top * 100}%`,
-                height: `${Math.max(claim.height * 100, 1.5)}%`,
-              }}
-            />
-          ))}
           <div
             className="absolute inset-x-0 rounded-sm border border-white/25 bg-white/10"
             style={{
@@ -237,6 +256,23 @@ export function EditorMinimap({
             }}
           />
         </div>
+        {claims.map((claim) => (
+          <button
+            key={claim.id}
+            type="button"
+            title="Jump to flagged claim"
+            aria-label="Jump to flagged claim"
+            className="absolute right-0.5 z-10 w-1.5 cursor-pointer rounded-sm bg-red-500 hover:bg-red-400"
+            style={{
+              top: `${claim.top * 100}%`,
+              height: `${Math.max(claim.height * 100, 2)}%`,
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              jumpToClaim(claim.id);
+            }}
+          />
+        ))}
       </div>
     </aside>
   );

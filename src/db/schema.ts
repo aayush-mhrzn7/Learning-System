@@ -105,9 +105,9 @@ export const notes = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    directoryId: uuid("directory_id")
-      .notNull()
-      .references(() => directories.id, { onDelete: "cascade" }),
+    directoryId: uuid("directory_id").references(() => directories.id, {
+      onDelete: "cascade",
+    }),
     title: text("title").notNull().default("Untitled"),
     kind: noteKind("kind").notNull().default("writing"),
     content: jsonb("content")

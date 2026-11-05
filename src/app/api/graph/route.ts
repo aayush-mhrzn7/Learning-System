@@ -40,7 +40,9 @@ export async function GET() {
       kind: null,
     })),
     ...noteRows
-      .filter((note) => directoryIds.has(note.directoryId))
+      .filter(
+        (note) => !note.directoryId || directoryIds.has(note.directoryId),
+      )
       .map((note) => ({
         id: note.id,
         type: "note" as const,
@@ -65,10 +67,10 @@ export async function GET() {
   }
 
   for (const note of noteRows) {
-    if (!directoryIds.has(note.directoryId)) continue;
+    if (note.directoryId && !directoryIds.has(note.directoryId)) continue;
     edges.push({
       id: `note:${note.id}`,
-      source: note.directoryId,
+      source: note.directoryId ?? ROOT_ID,
       target: note.id,
     });
   }

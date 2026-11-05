@@ -14,7 +14,7 @@ export type DirectoryItem = {
 
 export type NoteSummary = {
   id: string;
-  directoryId: string;
+  directoryId: string | null;
   title: string;
   kind: NoteKind;
   status: "draft" | "published";

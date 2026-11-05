@@ -9,7 +9,7 @@ const EXTRACT_CHUNK_CHARS = 2800;
 const DECISION_BATCH_SIZE = 40;
 
 /** Only claims with P(likely wrong) above this get a paid web fact-check. */
-export const CLAIM_WEB_CHECK_THRESHOLD = 0.8;
+export const CLAIM_WEB_CHECK_THRESHOLD = 0.7;
 /** Hard cap after extract — Decisions never sees a 50-claim firehose. */
 export const MAX_EXTRACTED_CLAIMS = 8;
 /** Hard cap on paid web judges per run (highest suspicion first). */

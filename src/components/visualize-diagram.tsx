@@ -1,7 +1,9 @@
 "use client";
 
 import * as d3 from "d3";
-import { useEffect, useRef } from "react";
+import { Check, Copy } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { VisualizeDiagram } from "@/db/schema";
 
 type LayoutNode = {
@@ -166,12 +168,63 @@ function edgePoints(
   return { x1, y1, x2, y2 };
 }
 
+async function svgToPngBlob(svgEl: SVGSVGElement): Promise<Blob> {
+  const viewBox = svgEl.viewBox.baseVal;
+  const width = viewBox.width || svgEl.clientWidth || 640;
+  const height = viewBox.height || svgEl.clientHeight || 240;
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(width));
+  clone.setAttribute("height", String(height));
+  if (!clone.getAttribute("viewBox")) {
+    clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  }
+
+  // Serialized SVG loses Tailwind background — paint it into the export.
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("width", "100%");
+  bg.setAttribute("height", "100%");
+  bg.setAttribute("fill", "#0a0a0a");
+  clone.insertBefore(bg, clone.firstChild);
+
+  const xml = new XMLSerializer().serializeToString(clone);
+  const url = URL.createObjectURL(
+    new Blob([xml], { type: "image/svg+xml;charset=utf-8" }),
+  );
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("svg decode failed"));
+      img.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width));
+    canvas.height = Math.max(1, Math.round(height));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+    ctx.fillStyle = "#0a0a0a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("png encode failed"))),
+        "image/png",
+      );
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function VisualizeDiagramView({
   diagram,
 }: {
   diagram: VisualizeDiagram;
 }) {
   const ref = useRef<SVGSVGElement | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const svgEl = ref.current;
@@ -265,12 +318,39 @@ export function VisualizeDiagramView({
       .text((d) => d.label);
   }, [diagram]);
 
+  async function copyDiagram() {
+    const svgEl = ref.current;
+    if (!svgEl) return;
+    try {
+      const blob = await svgToPngBlob(svgEl);
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": blob }),
+      ]);
+      setCopied(true);
+      toast.success("Diagram copied — paste into a writing note");
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error("Could not copy diagram");
+    }
+  }
+
   return (
-    <svg
-      ref={ref}
-      className="w-full rounded-lg border border-[#222] bg-[#0a0a0a]"
-      role="img"
-      aria-label="Architecture diagram"
-    />
+    <div className="group relative">
+      <button
+        type="button"
+        onClick={() => void copyDiagram()}
+        className="absolute top-2 right-2 z-10 inline-flex h-7 items-center gap-1.5 rounded-md border border-[#333] bg-[#121212]/95 px-2 text-[12px] text-[#ccc] opacity-100 shadow-sm transition-colors hover:border-[#555] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        aria-label="Copy diagram"
+      >
+        {copied ? <Check size={13} /> : <Copy size={13} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+      <svg
+        ref={ref}
+        className="w-full rounded-lg border border-[#222] bg-[#0a0a0a]"
+        role="img"
+        aria-label="Architecture diagram"
+      />
+    </div>
   );
 }

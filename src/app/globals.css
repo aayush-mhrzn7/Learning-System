@@ -350,6 +350,15 @@ button:disabled {
   text-underline-offset: 3px;
 }
 
+.learning-editor .learning-editor-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1rem 0;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+}
+
 .claim-flag {
   cursor: help;
   text-decoration-line: underline;
