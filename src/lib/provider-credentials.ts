@@ -10,6 +10,17 @@ import {
   type ResolvedProviderCredentials,
 } from "@/lib/providers";
 
+function decryptProviderApiKey(ciphertext: string, provider: ProviderId) {
+  try {
+    return decryptSecret(ciphertext);
+  } catch {
+    const label = provider === "gpt" ? "ChatGPT" : "OpenRouter";
+    throw new Error(
+      `${label} API key cannot be decrypted (encryption key changed or data is corrupt). Re-enter the key in Settings → Providers.`,
+    );
+  }
+}
+
 export type ProviderSettingsView = {
   activeProvider: ProviderId;
   providers: Record<
@@ -208,7 +219,7 @@ export async function resolveActiveProviderCredentials(
 
   return {
     provider: "gpt",
-    apiKey: decryptSecret(row.apiKeyCiphertext),
+    apiKey: decryptProviderApiKey(row.apiKeyCiphertext, "gpt"),
     model: row.model,
     baseUrl: row.baseUrl.replace(/\/$/, ""),
   };
@@ -321,11 +332,26 @@ export async function getProviderConnectionStatuses(
       }
 
       const row = byProvider[provider];
-      const probe = await probeProviderKey(
-        provider,
-        decryptSecret(row.apiKeyCiphertext),
-        row.baseUrl,
-      );
+      let apiKey: string;
+      try {
+        apiKey = decryptProviderApiKey(row.apiKeyCiphertext, provider);
+      } catch (error) {
+        return [
+          provider,
+          {
+            configured: true,
+            active,
+            ok: false,
+            label: "Needs re-entry",
+            detail:
+              error instanceof Error
+                ? error.message
+                : "Stored API key cannot be decrypted",
+          } satisfies ProviderConnectionStatus,
+        ] as const;
+      }
+
+      const probe = await probeProviderKey(provider, apiKey, row.baseUrl);
 
       if (!probe.ok) {
         return [

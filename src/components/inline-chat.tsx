@@ -16,12 +16,22 @@ type ChatTurn = {
   content: string;
 };
 
+export type InlineChatSeed = {
+  text: string;
+  top: number;
+  left: number;
+};
+
 export function InlineChat({
   editor,
   noteId,
+  seed,
+  onSeedConsumed,
 }: {
   editor: Editor;
   noteId: string;
+  seed?: InlineChatSeed | null;
+  onSeedConsumed?: () => void;
 }) {
   const [anchor, setAnchor] = useState<SelectionAnchor | null>(null);
   const [open, setOpen] = useState(false);
@@ -32,6 +42,22 @@ export function InlineChat({
   const turnsEndRef = useRef<HTMLDivElement | null>(null);
   const selectionRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!seed?.text.trim()) return;
+    const text = seed.text.trim();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    selectionRef.current = text;
+    setAnchor({ top: seed.top, left: seed.left, text });
+    setDraft("");
+    setTurns([]);
+    setBusy(false);
+    setOpen(true);
+    onSeedConsumed?.();
+    // Only react to a new seed payload; ignore callback identity churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed]);
 
   useEffect(() => {
     function syncSelection() {

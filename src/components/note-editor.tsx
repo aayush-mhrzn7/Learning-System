@@ -32,7 +32,10 @@ import {
 } from "@/components/claim-flags";
 import { EditorMinimap } from "@/components/editor-minimap";
 import { FormattingToolbar } from "@/components/formatting-toolbar";
-import { InlineChat } from "@/components/inline-chat";
+import {
+  InlineChat,
+  type InlineChatSeed,
+} from "@/components/inline-chat";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -98,6 +101,9 @@ export function NoteEditor({
     x: number;
     y: number;
   } | null>(null);
+  const [inlineChatSeed, setInlineChatSeed] = useState<InlineChatSeed | null>(
+    null,
+  );
   const saveTimer = useRef<number | null>(null);
   const titleRef = useRef(title);
   const noteIdRef = useRef(noteId);
@@ -1007,7 +1013,14 @@ export function NoteEditor({
           ) : null}
         </div>
 
-        {editor ? <InlineChat editor={editor} noteId={noteId} /> : null}
+        {editor ? (
+          <InlineChat
+            editor={editor}
+            noteId={noteId}
+            seed={inlineChatSeed}
+            onSeedConsumed={() => setInlineChatSeed(null)}
+          />
+        ) : null}
 
         {hovered ? (
           <aside
@@ -1030,6 +1043,21 @@ export function NoteEditor({
               <p className="text-xs leading-5 text-[#ddd]">
                 {hovered.claim.reason}
               </p>
+              <button
+                type="button"
+                className="mt-3 text-left text-[13px] text-[#aaa] underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                onClick={() => {
+                  const claim = hovered.claim;
+                  setInlineChatSeed({
+                    text: claim.claimText,
+                    top: hovered.y,
+                    left: hovered.x,
+                  });
+                  setHovered(null);
+                }}
+              >
+                Ask in inline chat
+              </button>
               {hovered.claim.sources.length ? (
                 <div className="mt-3 flex flex-col gap-1.5 border-t border-border pt-3">
                   {hovered.claim.sources.map((source) => (
