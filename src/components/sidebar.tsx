@@ -7,6 +7,7 @@ import {
   FilePlus2,
   Folder,
   FolderPlus,
+  Activity,
   LogOut,
   Pencil,
   PanelLeftClose,
@@ -100,6 +101,7 @@ type SidebarProps = {
   onCollapse: () => void;
   onSearch: () => void;
   onKnowledgeGraph: () => void;
+  onUsage: () => void;
   onSettings: () => void;
   mobile?: boolean;
 };
@@ -964,6 +966,13 @@ export function Sidebar(props: SidebarProps) {
       </ContextMenu>
 
       <div className="border-t border-border p-2">
+        <button
+          onClick={props.onUsage}
+          className="sidebar-row w-full text-muted-foreground hover:text-foreground"
+        >
+          <Activity size={14} />
+          Usage
+        </button>
         <button
           onClick={props.onSettings}
           className="sidebar-row w-full text-muted-foreground hover:text-foreground"

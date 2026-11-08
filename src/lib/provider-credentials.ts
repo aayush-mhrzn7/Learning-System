@@ -218,6 +218,7 @@ export async function resolveActiveProviderCredentials(
   }
 
   return {
+    userId,
     provider: "gpt",
     apiKey: decryptProviderApiKey(row.apiKeyCiphertext, "gpt"),
     model: row.model,

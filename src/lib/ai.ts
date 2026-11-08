@@ -1,6 +1,10 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import {
+  recordAiUsage,
+  type AiTask,
+} from "@/lib/ai-usage";
+import {
   DECISIONS_MODEL,
   type ResolvedProviderCredentials,
 } from "@/lib/providers";
@@ -119,6 +123,24 @@ function collectOutputText(response: OpenAI.Responses.Response): string {
     }
   }
   return parts.join("\n").trim();
+}
+
+function countToolCalls(response: OpenAI.Responses.Response): number {
+  const billed = response.tool_usage?.web_search?.num_requests;
+  if (typeof billed === "number" && billed > 0) return billed;
+
+  let count = 0;
+  for (const item of response.output ?? []) {
+    const type = (item as { type?: string }).type ?? "";
+    if (
+      type.includes("web_search") ||
+      type.includes("web_search_call") ||
+      type === "openrouter:web_search"
+    ) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function collectSearchSources(
@@ -241,6 +263,7 @@ function responseExtras(
 
 async function structuredResponse<T>(
   credentials: ResolvedProviderCredentials,
+  task: AiTask,
   name: string,
   schema: Record<string, unknown>,
   instructions: string,
@@ -248,89 +271,124 @@ async function structuredResponse<T>(
   webSearch = false,
 ): Promise<T> {
   const client = createClient(credentials);
-  const response = await client.responses.create({
-    model: credentials.model,
-    instructions,
-    input,
-    store: false,
-    ...responseExtras(credentials, webSearch),
-    ...(webSearch
-      ? {
-          tools: webSearchTools(credentials),
-          tool_choice: "auto" as const,
-          ...(credentials.provider === "gpt"
-            ? {
-                include: ["web_search_call.action.sources" as const],
-              }
-            : {}),
-        }
-      : {}),
-    text: {
-      format: {
-        type: "json_schema",
-        name,
-        strict: true,
-        schema,
-      },
-    },
-  });
-
-  const raw = collectOutputText(response);
-  if (!raw) {
-    const reason = response.incomplete_details?.reason;
-    throw new Error(
-      reason === "max_output_tokens"
-        ? "The model ran out of output tokens before returning JSON. Try again or switch model."
-        : "The model returned no structured output",
-    );
-  }
-
+  const started = Date.now();
+  let response: OpenAI.Responses.Response | null = null;
   try {
-    return parseJsonObject(raw) as T;
-  } catch (error) {
-    // Free OpenRouter models often ignore json_schema when tools run.
-    // Reformat the prose answer (and search URLs) into JSON without another search.
-    if (!webSearch || credentials.provider !== "openrouter") {
-      throw error;
+    response = await client.responses.create({
+      model: credentials.model,
+      instructions,
+      input,
+      store: false,
+      ...responseExtras(credentials, webSearch),
+      ...(webSearch
+        ? {
+            tools: webSearchTools(credentials),
+            tool_choice: "auto" as const,
+            ...(credentials.provider === "gpt"
+              ? {
+                  include: ["web_search_call.action.sources" as const],
+                }
+              : {}),
+          }
+        : {}),
+      text: {
+        format: {
+          type: "json_schema",
+          name,
+          strict: true,
+          schema,
+        },
+      },
+    });
+
+    const toolCallCount = countToolCalls(response);
+    await recordAiUsage({
+      userId: credentials.userId,
+      provider: credentials.provider,
+      model: credentials.model,
+      api: "responses",
+      task,
+      inputTokens: response.usage?.input_tokens,
+      outputTokens: response.usage?.output_tokens,
+      totalTokens: response.usage?.total_tokens,
+      toolCallCount,
+      webSearchRequests: toolCallCount,
+      latencyMs: Date.now() - started,
+      ok: true,
+    });
+
+    const raw = collectOutputText(response);
+    if (!raw) {
+      const reason = response.incomplete_details?.reason;
+      throw new Error(
+        reason === "max_output_tokens"
+          ? "The model ran out of output tokens before returning JSON. Try again or switch model."
+          : "The model returned no structured output",
+      );
     }
 
-    const searchSources = collectSearchSources(response);
-    const reformatted: T = await structuredResponse<T>(
-      credentials,
-      name,
-      schema,
-      [
-        "Convert the fact-check notes into the required JSON schema only.",
-        "Do not add new facts. Prefer the notes' conclusion for verdict and reason.",
-        "Include source title/url pairs when present.",
-      ].join(" "),
-      [
-        "Fact-check notes:",
-        raw,
-        searchSources.length
-          ? `Search sources:\n${JSON.stringify(searchSources)}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-      false,
-    );
-
-    if (
-      name === "claim_verdict" &&
-      reformatted &&
-      typeof reformatted === "object" &&
-      searchSources.length
-    ) {
-      const verdict = reformatted as {
-        sources?: { title: string; url: string }[];
-      };
-      if (!verdict.sources?.length) {
-        verdict.sources = searchSources;
+    try {
+      return parseJsonObject(raw) as T;
+    } catch (error) {
+      // Free OpenRouter models often ignore json_schema when tools run.
+      // Reformat the prose answer (and search URLs) into JSON without another search.
+      if (!webSearch || credentials.provider !== "openrouter") {
+        throw error;
       }
-    }
 
-    return reformatted;
+      const searchSources = collectSearchSources(response);
+      const reformatted: T = await structuredResponse<T>(
+        credentials,
+        "reformat",
+        name,
+        schema,
+        [
+          "Convert the fact-check notes into the required JSON schema only.",
+          "Do not add new facts. Prefer the notes' conclusion for verdict and reason.",
+          "Include source title/url pairs when present.",
+        ].join(" "),
+        [
+          "Fact-check notes:",
+          raw,
+          searchSources.length
+            ? `Search sources:\n${JSON.stringify(searchSources)}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        false,
+      );
+
+      if (
+        name === "claim_verdict" &&
+        reformatted &&
+        typeof reformatted === "object" &&
+        searchSources.length
+      ) {
+        const verdict = reformatted as {
+          sources?: { title: string; url: string }[];
+        };
+        if (!verdict.sources?.length) {
+          verdict.sources = searchSources;
+        }
+      }
+
+      return reformatted;
+    }
+  } catch (error) {
+    if (!response) {
+      await recordAiUsage({
+        userId: credentials.userId,
+        provider: credentials.provider,
+        model: credentials.model,
+        api: "responses",
+        task,
+        latencyMs: Date.now() - started,
+        ok: false,
+        error: error instanceof Error ? error.message : "request failed",
+      });
+    }
+    throw error;
   }
 }
 
@@ -420,6 +478,7 @@ export async function extractClaims(
   const chunkResults = await mapPool(chunks, 2, async (chunk) => {
     const data = await structuredResponse<unknown>(
       credentials,
+      "extract",
       "extracted_claims",
       claimsSchemaPayload,
       extractInstructions,
@@ -478,61 +537,89 @@ export async function decideClaims(
   const client = createClient(credentials);
 
   await mapPool(batches, 2, async (batch) => {
-    const decision = await client.decisions.create({
-      model: DECISIONS_MODEL,
-      input: [
-        {
-          role: "developer",
-          content: [
-            "You are a cheap gate before paid web fact-checking. Minimize web calls.",
-            "For each claim, estimate whether it is LIKELY FACTUALLY WRONG and needs web verification.",
-            "True (high) = likely incorrect: false definitions, wrong mechanisms/numbers, claims that contradict the surrounding note context,",
-            "or blunt mistakes a careful reader would flag (e.g. 'semantic chunking means chunking by character length' next to a correct meaning-based definition).",
-            "False (low) = skip web search: ordinary true tutorial facts, standard RAG pipeline steps,",
-            "correct definitions, soft 'common approach' lines, advantages/disadvantages, config descriptions,",
-            "example walkthrough narration, opinions, incomplete fragments.",
-            "Use surrounding context when provided. When unsure, prefer False (skip) to save cost —",
-            "only True when there is a concrete reason to suspect the claim is wrong.",
-          ].join(" "),
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: "Evaluate each claim in the JSON evidence by id.",
-            },
-            {
-              type: "input_json",
-              data: {
-                claims: batch.map((item) => ({
-                  id: `claim_${item.index}`,
-                  text: item.text,
-                  context: item.context || undefined,
-                })),
+    const started = Date.now();
+    try {
+      const decision = await client.decisions.create({
+        model: DECISIONS_MODEL,
+        input: [
+          {
+            role: "developer",
+            content: [
+              "You are a cheap gate before paid web fact-checking. Minimize web calls.",
+              "For each claim, estimate whether it is LIKELY FACTUALLY WRONG and needs web verification.",
+              "True (high) = likely incorrect: false definitions, wrong mechanisms/numbers, claims that contradict the surrounding note context,",
+              "or blunt mistakes a careful reader would flag (e.g. 'semantic chunking means chunking by character length' next to a correct meaning-based definition).",
+              "False (low) = skip web search: ordinary true tutorial facts, standard RAG pipeline steps,",
+              "correct definitions, soft 'common approach' lines, advantages/disadvantages, config descriptions,",
+              "example walkthrough narration, opinions, incomplete fragments.",
+              "Use surrounding context when provided. When unsure, prefer False (skip) to save cost —",
+              "only True when there is a concrete reason to suspect the claim is wrong.",
+            ].join(" "),
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "Evaluate each claim in the JSON evidence by id.",
               },
-            },
-          ],
-        },
-      ],
-      questions: batch.map((item) => ({
-        type: "predicate" as const,
-        name: `claim_${item.index}`,
-        instructions: [
-          `Is claim id "claim_${item.index}" LIKELY FACTUALLY WRONG and worth a paid web fact-check?`,
-          `True only if it looks incorrect or contradicts its context.`,
-          `False for ordinary true tutorial content — skip the web call.`,
-        ].join(" "),
-      })),
-    });
+              {
+                type: "input_json",
+                data: {
+                  claims: batch.map((item) => ({
+                    id: `claim_${item.index}`,
+                    text: item.text,
+                    context: item.context || undefined,
+                  })),
+                },
+              },
+            ],
+          },
+        ],
+        questions: batch.map((item) => ({
+          type: "predicate" as const,
+          name: `claim_${item.index}`,
+          instructions: [
+            `Is claim id "claim_${item.index}" LIKELY FACTUALLY WRONG and worth a paid web fact-check?`,
+            `True only if it looks incorrect or contradicts its context.`,
+            `False for ordinary true tutorial content — skip the web call.`,
+          ].join(" "),
+        })),
+      });
 
-    for (const answer of decision.answers) {
-      if (answer.type !== "predicate" || !answer.name) continue;
-      const match = /^claim_(\d+)$/.exec(answer.name);
-      if (!match) continue;
-      const index = Number(match[1]);
-      if (Number.isNaN(index) || index < 0 || index >= claims.length) continue;
-      scores[index] = answer.probability;
+      await recordAiUsage({
+        userId: credentials.userId,
+        provider: credentials.provider,
+        model: decision.model || DECISIONS_MODEL,
+        api: "decisions",
+        task: "decide",
+        inputTokens: decision.usage?.input_tokens,
+        outputTokens: decision.usage?.output_tokens,
+        totalTokens: decision.usage?.total_tokens,
+        latencyMs: Date.now() - started,
+        ok: true,
+      });
+
+      for (const answer of decision.answers) {
+        if (answer.type !== "predicate" || !answer.name) continue;
+        const match = /^claim_(\d+)$/.exec(answer.name);
+        if (!match) continue;
+        const index = Number(match[1]);
+        if (Number.isNaN(index) || index < 0 || index >= claims.length) continue;
+        scores[index] = answer.probability;
+      }
+    } catch (error) {
+      await recordAiUsage({
+        userId: credentials.userId,
+        provider: credentials.provider,
+        model: DECISIONS_MODEL,
+        api: "decisions",
+        task: "decide",
+        latencyMs: Date.now() - started,
+        ok: false,
+        error: error instanceof Error ? error.message : "decision failed",
+      });
+      throw error;
     }
   });
 
@@ -557,6 +644,7 @@ export async function judgeClaim(
 
   const data = await structuredResponse<unknown>(
     credentials,
+    "judge",
     "claim_verdict",
     {
       type: "object",
@@ -845,6 +933,8 @@ export async function* streamVisualizeTurn(
   const client = createClient(credentials);
   const packed = packVisualizeInput(args);
   let raw = "";
+  const started = Date.now();
+  let completed: OpenAI.Responses.Response | null = null;
 
   try {
     const stream = await client.responses.create({
@@ -865,6 +955,9 @@ export async function* streamVisualizeTurn(
     });
 
     for await (const event of stream) {
+      if (event.type === "response.completed") {
+        completed = event.response;
+      }
       if (event.type !== "response.output_text.delta") continue;
       raw += event.delta;
       yield {
@@ -873,6 +966,21 @@ export async function* streamVisualizeTurn(
         explanation: peekJsonString(raw, "explanation") ?? "",
       };
     }
+
+    await recordAiUsage({
+      userId: credentials.userId,
+      provider: credentials.provider,
+      model: credentials.model,
+      api: "responses",
+      task: "visualize",
+      inputTokens: completed?.usage?.input_tokens,
+      outputTokens: completed?.usage?.output_tokens,
+      totalTokens: completed?.usage?.total_tokens,
+      toolCallCount: completed ? countToolCalls(completed) : 0,
+      latencyMs: Date.now() - started,
+      ok: Boolean(raw.trim()),
+      error: raw.trim() ? null : "The model returned no structured output",
+    });
 
     if (!raw.trim()) {
       yield { type: "error", error: "The model returned no structured output" };
@@ -883,6 +991,16 @@ export async function* streamVisualizeTurn(
       turn: finalizeVisualizeTurn(parseJsonObject(raw)),
     };
   } catch (error) {
+    await recordAiUsage({
+      userId: credentials.userId,
+      provider: credentials.provider,
+      model: credentials.model,
+      api: "responses",
+      task: "visualize",
+      latencyMs: Date.now() - started,
+      ok: false,
+      error: error instanceof Error ? error.message : "Visualize request failed",
+    });
     yield {
       type: "error",
       error:
@@ -902,6 +1020,7 @@ export async function answerVisualizeTurn(
 ): Promise<VisualizeTurnResult> {
   const data = await structuredResponse<unknown>(
     credentials,
+    "visualize",
     "visualize_turn",
     visualizeSchemaPayload,
     visualizeInstructions,
@@ -943,6 +1062,7 @@ export async function answerInlineSelection(
 
   const data = await structuredResponse<unknown>(
     credentials,
+    "inline",
     "inline_chat_reply",
     {
       type: "object",
@@ -972,6 +1092,7 @@ export async function findMissingTopics(
 ) {
   const data = await structuredResponse<unknown>(
     credentials,
+    "gaps",
     "missing_topics",
     {
       type: "object",

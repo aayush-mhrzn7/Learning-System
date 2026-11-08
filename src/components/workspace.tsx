@@ -7,6 +7,7 @@ import { NoteEditor } from "@/components/note-editor";
 import { SearchDialog } from "@/components/search-dialog";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { Sidebar } from "@/components/sidebar";
+import { UsagePage } from "@/components/usage-page";
 import { VisualizeNote } from "@/components/visualize-note";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,7 @@ export function Workspace() {
   const [isMobile, setIsMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [firstDirectoryOpen, setFirstDirectoryOpen] = useState(false);
   const [firstDirectoryName, setFirstDirectoryName] = useState("");
@@ -45,6 +47,7 @@ export function Workspace() {
 
   const openNote = useCallback((id: string) => {
     setGraphOpen(false);
+    setUsageOpen(false);
     setSelectedNoteId(id);
     localStorage.setItem("learning-last-note", id);
     if (isMobileViewport()) setSidebarCollapsed(true);
@@ -244,7 +247,13 @@ export function Workspace() {
           }}
           onKnowledgeGraph={() => {
             if (isMobile) setSidebarCollapsed(true);
+            setUsageOpen(false);
             setGraphOpen(true);
+          }}
+          onUsage={() => {
+            if (isMobile) setSidebarCollapsed(true);
+            setGraphOpen(false);
+            setUsageOpen(true);
           }}
           onSettings={() => {
             if (isMobile) setSidebarCollapsed(true);
@@ -254,7 +263,12 @@ export function Workspace() {
         />
       </div>
 
-      {graphOpen ? (
+      {usageOpen ? (
+        <UsagePage
+          sidebarCollapsed={sidebarCollapsed}
+          onOpenSidebar={openSidebar}
+        />
+      ) : graphOpen ? (
         <KnowledgeGraph
           sidebarCollapsed={sidebarCollapsed}
           onOpenSidebar={openSidebar}

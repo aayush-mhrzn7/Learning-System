@@ -2,7 +2,9 @@ import { sql } from "drizzle-orm";
 import {
   AnyPgColumn,
   boolean,
+  doublePrecision,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -242,6 +244,39 @@ export const providerCredentials = pgTable(
   ],
 );
 
+/** One row per OpenAI/OpenRouter API call (Responses or Decisions). */
+export const aiUsage = pgTable(
+  "ai_usage",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: aiProvider("provider").notNull(),
+    model: text("model").notNull(),
+    /** responses | decisions */
+    api: text("api").notNull(),
+    /** extract | decide | judge | gaps | inline | visualize | reformat */
+    task: text("task").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    toolCallCount: integer("tool_call_count").notNull().default(0),
+    latencyMs: integer("latency_ms").notNull().default(0),
+    /** Null when no price map entry for the model. */
+    estimatedCostUsd: doublePrecision("estimated_cost_usd"),
+    ok: boolean("ok").notNull().default(true),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("ai_usage_user_idx").on(table.userId),
+    index("ai_usage_user_created_idx").on(table.userId, table.createdAt),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Directory = typeof directories.$inferSelect;
 export type Note = typeof notes.$inferSelect;
@@ -249,3 +284,4 @@ export type NoteLink = typeof noteLinks.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
 export type ChecklistItem = typeof checklistItems.$inferSelect;
 export type ProviderCredential = typeof providerCredentials.$inferSelect;
+export type AiUsage = typeof aiUsage.$inferSelect;

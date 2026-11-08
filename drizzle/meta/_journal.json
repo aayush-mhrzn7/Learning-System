@@ -29,6 +29,13 @@
       "when": 1794000000000,
       "tag": "0003_note_directory_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794001000000,
+      "tag": "0004_ai_usage",
+      "breakpoints": true
     }
   ]
 }

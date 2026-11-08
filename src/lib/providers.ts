@@ -35,6 +35,7 @@ export function isEnabledProviderId(value: string): value is EnabledProviderId {
 }
 
 export type ResolvedProviderCredentials = {
+  userId: string;
   provider: ProviderId;
   apiKey: string;
   model: string;
