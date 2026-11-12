@@ -12,9 +12,12 @@ function readNode(node: EditorNode, skipCode: boolean): string {
   const separator =
     node.type === "paragraph" ||
     node.type === "heading" ||
-    node.type === "listItem"
+    node.type === "listItem" ||
+    node.type === "tableRow"
       ? "\n"
-      : "";
+      : node.type === "tableCell" || node.type === "tableHeader"
+        ? "\t"
+        : "";
   return `${(node.content ?? [])
     .map((child) => readNode(child, skipCode))
     .join("")}${separator}`;

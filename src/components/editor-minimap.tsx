@@ -96,20 +96,22 @@ export function EditorMinimap({
 
     const nextBlocks: BlockMark[] = [];
 
-    const title = content.querySelector("input");
-    if (title && title.value.trim()) {
-      const { top, height } = offsetInContent(title, content);
-      nextBlocks.push({
-        top: top / writtenHeight,
-        height: Math.max(height / writtenHeight, 0.02),
-        width: Math.min(0.95, 0.4 + title.value.trim().length / 40),
-        kind: "heading",
-      });
+    const title = content.querySelector("textarea, input");
+    if (title instanceof HTMLTextAreaElement || title instanceof HTMLInputElement) {
+      if (title.value.trim()) {
+        const { top, height } = offsetInContent(title, content);
+        nextBlocks.push({
+          top: top / writtenHeight,
+          height: Math.max(height / writtenHeight, 0.02),
+          width: Math.min(0.95, 0.4 + title.value.trim().length / 40),
+          kind: "heading",
+        });
+      }
     }
 
     content
       .querySelectorAll<HTMLElement>(
-        ".learning-editor h1, .learning-editor h2, .learning-editor h3, .learning-editor p, .learning-editor pre, .learning-editor li",
+        ".learning-editor h1, .learning-editor h2, .learning-editor h3, .learning-editor h4, .learning-editor h5, .learning-editor h6, .learning-editor p, .learning-editor pre, .learning-editor li, .learning-editor th, .learning-editor td",
       )
       .forEach((node) => {
         if (!(node.textContent ?? "").trim() && !node.querySelector("img, br")) {
@@ -117,7 +119,7 @@ export function EditorMinimap({
         }
         const { top, height } = offsetInContent(node, content);
         const textLen = (node.textContent ?? "").trim().length;
-        const kind = node.matches("h1, h2, h3")
+        const kind = node.matches("h1, h2, h3, h4, h5, h6")
           ? "heading"
           : node.matches("pre")
             ? "code"

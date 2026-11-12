@@ -2,6 +2,7 @@
 
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
+import { TableKit } from "@tiptap/extension-table";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
@@ -107,6 +108,7 @@ export function NoteEditor({
   );
   const saveTimer = useRef<number | null>(null);
   const titleRef = useRef(title);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   const noteIdRef = useRef(noteId);
   const claimsRef = useRef<ClaimFlag[]>([]);
   const pipelineStepRef = useRef("save");
@@ -125,6 +127,13 @@ export function NoteEditor({
 
   useEffect(() => {
     titleRef.current = title;
+  }, [title]);
+
+  useEffect(() => {
+    const el = titleInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
   }, [title]);
 
   useEffect(() => {
@@ -163,6 +172,7 @@ export function NoteEditor({
     extensions: [
       StarterKit.configure({
         codeBlock: false,
+        heading: { levels: [1, 2, 3, 4, 5, 6] },
         link: {
           openOnClick: false,
           autolink: true,
@@ -173,6 +183,9 @@ export function NoteEditor({
             target: "_blank",
           },
         },
+      }),
+      TableKit.configure({
+        table: { resizable: true },
       }),
       CodeBlockLowlight.configure({ lowlight }),
       // shortcut: base64 images bloat note JSON; move to object storage if notes get heavy
@@ -942,11 +955,13 @@ export function NoteEditor({
               ref={contentRef}
               className="w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20"
             >
-            <input
+            <textarea
+              ref={titleInputRef}
+              rows={1}
               value={title}
               readOnly={readOnly}
               onChange={(event) => {
-                const next = event.target.value;
+                const next = event.target.value.replace(/\n/g, " ");
                 setTitle(next);
                 titleRef.current = next;
                 onTitleChange(noteId, next.trim() || "Untitled");
@@ -960,7 +975,13 @@ export function NoteEditor({
                   scheduleSave();
                 }
               }}
-              className={`mb-3 w-full bg-transparent text-[1.75rem] font-semibold tracking-[-0.035em] outline-none placeholder:text-[#444] sm:text-4xl ${
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  editor.chain().focus("start").run();
+                }
+              }}
+              className={`mb-3 w-full resize-none overflow-hidden bg-transparent text-[1.75rem] font-semibold leading-tight tracking-[-0.035em] outline-none placeholder:text-[#444] sm:text-4xl ${
                 readOnly ? "cursor-default caret-transparent" : ""
               }`}
               placeholder="Untitled"
