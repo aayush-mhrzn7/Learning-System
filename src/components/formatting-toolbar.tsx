@@ -3,6 +3,10 @@
 import type { Editor } from "@tiptap/react";
 import {
   Bold,
+  BetweenHorizonalEnd,
+  BetweenHorizonalStart,
+  BetweenVerticalEnd,
+  BetweenVerticalStart,
   Code2,
   Heading1,
   Heading2,
@@ -17,6 +21,7 @@ import {
   Quote,
   Strikethrough,
   Table,
+  Trash2,
   Unlink,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
@@ -35,6 +40,7 @@ import { cn } from "@/lib/utils";
 export function FormattingToolbar({ editor }: { editor: Editor }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkValue, setLinkValue] = useState("");
+  const inTable = editor.isActive("table");
 
   function openLinkDialog() {
     setLinkValue(editor.getAttributes("link").href ?? "");
@@ -143,13 +149,46 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
     {
       label: "Insert table",
       icon: Table,
-      active: editor.isActive("table"),
+      active: inTable,
       run: () =>
         editor
           .chain()
           .focus()
           .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
           .run(),
+    },
+  ];
+
+  const tableTools = [
+    {
+      label: "Add column before",
+      icon: BetweenVerticalStart,
+      run: () => editor.chain().focus().addColumnBefore().run(),
+    },
+    {
+      label: "Add column after",
+      icon: BetweenVerticalEnd,
+      run: () => editor.chain().focus().addColumnAfter().run(),
+    },
+    {
+      label: "Delete column",
+      icon: Trash2,
+      run: () => editor.chain().focus().deleteColumn().run(),
+    },
+    {
+      label: "Add row before",
+      icon: BetweenHorizonalStart,
+      run: () => editor.chain().focus().addRowBefore().run(),
+    },
+    {
+      label: "Add row after",
+      icon: BetweenHorizonalEnd,
+      run: () => editor.chain().focus().addRowAfter().run(),
+    },
+    {
+      label: "Delete row",
+      icon: Trash2,
+      run: () => editor.chain().focus().deleteRow().run(),
     },
   ];
 
@@ -176,6 +215,25 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
             </Button>
           );
         })}
+        {inTable
+          ? tableTools.map((tool) => {
+              const Icon = tool.icon;
+              return (
+                <Button
+                  key={tool.label}
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={tool.run}
+                  title={tool.label}
+                  aria-label={tool.label}
+                >
+                  <Icon size={14} />
+                </Button>
+              );
+            })
+          : null}
         <span className="mx-1 h-4 w-px bg-border" />
         <Button
           type="button"

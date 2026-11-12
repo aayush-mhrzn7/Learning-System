@@ -3,6 +3,8 @@
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
+import { DOMParser as ProseMirrorDOMParser } from "@tiptap/pm/model";
+import type { EditorView } from "@tiptap/pm/view";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
@@ -55,6 +57,7 @@ import {
   readMinimapEnabled,
   type FontSizeOption,
 } from "@/lib/editor-preferences";
+import { markdownTableToHtml } from "@/lib/markdown-table";
 import type {
   ChecklistItem,
   NotePayload,
@@ -62,6 +65,42 @@ import type {
 } from "@/lib/types";
 
 const lowlight = createLowlight(common);
+
+function insertHtml(view: EditorView, html: string) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(
+    holder,
+  );
+  view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+}
+
+async function insertUploadedImage(
+  view: EditorView,
+  file: File,
+  pos?: number,
+) {
+  const imageType = view.state.schema.nodes.image;
+  if (!imageType) return;
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch("/api/uploads", { method: "POST", body: form });
+  if (!response.ok) {
+    toast.error("Image upload failed");
+    return;
+  }
+  const data = (await response.json()) as { url?: string };
+  if (!data.url) {
+    toast.error("Image upload failed");
+    return;
+  }
+  const node = imageType.create({ src: data.url });
+  const tr =
+    typeof pos === "number"
+      ? view.state.tr.insert(pos, node)
+      : view.state.tr.replaceSelectionWith(node);
+  view.dispatch(tr.scrollIntoView());
+}
 
 function formatStamp(value: string) {
   return new Date(value).toLocaleString(undefined, {
@@ -188,9 +227,15 @@ export function NoteEditor({
         table: { resizable: true },
       }),
       CodeBlockLowlight.configure({ lowlight }),
-      // shortcut: base64 images bloat note JSON; move to object storage if notes get heavy
       Image.configure({
-        allowBase64: true,
+        allowBase64: false,
+        resize: {
+          enabled: true,
+          directions: ["left", "right", "bottom-left", "bottom-right"],
+          minWidth: 80,
+          minHeight: 40,
+          alwaysPreserveAspectRatio: false,
+        },
         HTMLAttributes: {
           class: "learning-editor-image",
         },
@@ -207,19 +252,39 @@ export function NoteEditor({
       handlePaste(view, event) {
         const items = Array.from(event.clipboardData?.items ?? []);
         const imageItem = items.find((item) => item.type.startsWith("image/"));
-        if (!imageItem) return false;
-        const file = imageItem.getAsFile();
-        const imageType = view.state.schema.nodes.image;
-        if (!file || !imageType) return false;
+        if (imageItem) {
+          const file = imageItem.getAsFile();
+          if (!file || !view.state.schema.nodes.image) return false;
+          event.preventDefault();
+          void insertUploadedImage(view, file);
+          return true;
+        }
+
+        const plain = event.clipboardData?.getData("text/plain") ?? "";
+        const clipboardHtml = event.clipboardData?.getData("text/html") ?? "";
+        // Real HTML tables already paste fine; convert GFM pipe tables only.
+        if (!clipboardHtml.includes("<table") && view.state.schema.nodes.table) {
+          const tableHtml = markdownTableToHtml(plain);
+          if (tableHtml) {
+            event.preventDefault();
+            insertHtml(view, tableHtml);
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop(view, event, _slice, moved) {
+        if (moved) return false;
+        const file = Array.from(event.dataTransfer?.files ?? []).find((item) =>
+          item.type.startsWith("image/"),
+        );
+        if (!file || !view.state.schema.nodes.image) return false;
         event.preventDefault();
-        const reader = new FileReader();
-        reader.onload = () => {
-          const src = typeof reader.result === "string" ? reader.result : null;
-          if (!src) return;
-          const node = imageType.create({ src });
-          view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView());
-        };
-        reader.readAsDataURL(file);
+        const coords = view.posAtCoords({
+          left: event.clientX,
+          top: event.clientY,
+        });
+        void insertUploadedImage(view, file, coords?.pos);
         return true;
       },
     },

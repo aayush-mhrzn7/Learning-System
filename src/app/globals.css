@@ -422,6 +422,51 @@ button:disabled {
   border: 1px solid var(--border);
 }
 
+.learning-editor [data-resize-container][data-node="image"] {
+  margin: 1rem 0;
+  max-width: 100%;
+}
+
+.learning-editor [data-resize-container][data-node="image"] .learning-editor-image {
+  margin: 0;
+  width: 100%;
+  height: auto;
+}
+
+.learning-editor [data-resize-wrapper] {
+  max-width: 100%;
+}
+
+.learning-editor [data-resize-handle] {
+  z-index: 3;
+  background: #888;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.learning-editor [data-resize-container]:hover [data-resize-handle],
+.learning-editor [data-resize-container][data-resize-state="true"] [data-resize-handle] {
+  opacity: 1;
+}
+
+.learning-editor [data-resize-handle="left"],
+.learning-editor [data-resize-handle="right"] {
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.learning-editor [data-resize-handle="bottom-left"],
+.learning-editor [data-resize-handle="bottom-right"] {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  cursor: nwse-resize;
+}
+
+.learning-editor [data-resize-handle="bottom-left"] {
+  cursor: nesw-resize;
+}
+
 .claim-flag {
   cursor: help;
   text-decoration-line: underline;
