@@ -27,6 +27,11 @@ export async function GET(_request: Request, context: Context) {
     return Response.json({ error: "Note not found" }, { status: 404 });
   }
 
+  // Visualize notes only need title/visualize — skip claims/checklist load.
+  if (note.kind === "visualize") {
+    return Response.json({ note, claims: [], checklist: [] });
+  }
+
   const [claimRows, checklist] = await Promise.all([
     db
       .select()
@@ -90,7 +95,7 @@ export async function PATCH(request: Request, context: Context) {
   // Guard against client races that autosave an empty editor over a real note.
   if (
     body.data.plainText !== undefined &&
-    current.plainText.trim().length > 80 &&
+    current.plainText.trim().length > 20 &&
     body.data.plainText.trim().length === 0
   ) {
     return Response.json(

@@ -41,6 +41,7 @@ import {
   type InlineChatSeed,
 } from "@/components/inline-chat";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -111,21 +112,50 @@ function formatStamp(value: string) {
   });
 }
 
+function emptyNotePayload(noteId: string, title = "Untitled"): NotePayload {
+  return {
+    note: {
+      id: noteId,
+      directoryId: null,
+      title,
+      kind: "writing",
+      status: "draft",
+      updatedAt: new Date().toISOString(),
+      content: { type: "doc", content: [{ type: "paragraph" }] },
+      plainText: "",
+      visualize: null,
+      editedSincePublish: false,
+      factCheckIncomplete: false,
+      publishedAt: null,
+    },
+    claims: [],
+    checklist: [],
+  };
+}
+
 export function NoteEditor({
   noteId,
+  fresh = false,
+  initialTitle,
   sidebarCollapsed,
   onOpenSidebar,
   onTreeChanged,
   onTitleChange,
 }: {
   noteId: string;
+  fresh?: boolean;
+  initialTitle?: string;
   sidebarCollapsed: boolean;
   onOpenSidebar: () => void;
   onTreeChanged: () => Promise<void>;
   onTitleChange: (noteId: string, title: string) => void;
 }) {
-  const [payload, setPayload] = useState<NotePayload | null>(null);
-  const [title, setTitle] = useState("");
+  const shellTitle = initialTitle?.trim() || "Untitled";
+  const [payload, setPayload] = useState<NotePayload | null>(() =>
+    fresh ? emptyNotePayload(noteId, shellTitle) : null,
+  );
+  const [title, setTitle] = useState(fresh ? shellTitle : "");
+  const [ready, setReady] = useState(fresh);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
     "saved",
   );
@@ -135,6 +165,7 @@ export function NoteEditor({
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
+  const [loadError, setLoadError] = useState(false);
   // Default reading mode (mobile-first); desktop flips to edit after mount.
   const [readOnly, setReadOnly] = useState(true);
   const [hovered, setHovered] = useState<{
@@ -156,7 +187,8 @@ export function NoteEditor({
   // Otherwise an empty initial doc (or a stale prior note) can overwrite Neon.
   const loadingContent = useRef(true);
   const hydratedNoteId = useRef<string | null>(null);
-  const saveNowRef = useRef<() => Promise<void>>(async () => undefined);
+  const saveNowRef = useRef<() => Promise<boolean>>(async () => false);
+  const minimapTimer = useRef<number | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
@@ -290,7 +322,10 @@ export function NoteEditor({
     },
     onUpdate: () => {
       if (!loadingContent.current) scheduleSave();
-      setMinimapRevision((value) => value + 1);
+      if (minimapTimer.current) window.clearTimeout(minimapTimer.current);
+      minimapTimer.current = window.setTimeout(() => {
+        setMinimapRevision((value) => value + 1);
+      }, 200);
     },
   });
 
@@ -311,10 +346,11 @@ export function NoteEditor({
     editor.setEditable(!readOnly);
   }, [editor, readOnly]);
 
-  const saveNow = useCallback(async () => {
-    if (!editor || loadingContent.current || !editor.isEditable) return;
+  const saveNow = useCallback(async (): Promise<boolean> => {
+    // Editable gate lives at scheduleSave call sites; flush/pipeline must still PATCH.
+    if (!editor || loadingContent.current) return false;
     const targetNoteId = noteIdRef.current;
-    if (hydratedNoteId.current !== targetNoteId) return;
+    if (hydratedNoteId.current !== targetNoteId) return false;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSaveState("saving");
     const response = await fetch(`/api/notes/${targetNoteId}`, {
@@ -326,12 +362,12 @@ export function NoteEditor({
         plainText: editor.getText({ blockSeparator: "\n" }),
       }),
     });
-    if (noteIdRef.current !== targetNoteId) return;
     if (!response.ok) {
-      setSaveState("error");
-      return;
+      if (noteIdRef.current === targetNoteId) setSaveState("error");
+      return false;
     }
     const data = (await response.json()) as { note: NoteDetail };
+    if (noteIdRef.current !== targetNoteId) return true;
     setPayload((current) =>
       current
         ? {
@@ -352,8 +388,9 @@ export function NoteEditor({
     titleRef.current = data.note.title;
     onTitleChange(targetNoteId, data.note.title);
     setSaveState("saved");
-    await onTreeChanged();
-  }, [editor, onTitleChange, onTreeChanged]);
+    // Title already synced via onTitleChange; skip full tree reload on autosave.
+    return true;
+  }, [editor, onTitleChange]);
 
   useEffect(() => {
     saveNowRef.current = saveNow;
@@ -373,17 +410,55 @@ export function NoteEditor({
     loadingContent.current = true;
     hydratedNoteId.current = null;
     noteIdRef.current = noteId;
-    setPayload(null);
     pipelineGenRef.current += 1;
     setPipelineOpen(false);
     setPipelineRun(null);
     setPipelineBusy(false);
+    setLoadError(false);
+    setReady(fresh);
+    if (fresh) {
+      setTitle(shellTitle);
+      titleRef.current = shellTitle;
+      claimsRef.current = [];
+      setPayload(emptyNotePayload(noteId, shellTitle));
+    } else {
+      setPayload(null);
+      setTitle("");
+      titleRef.current = "";
+      claimsRef.current = [];
+    }
     if (!editor) return;
+
+    if (fresh) {
+      editor.commands.setContent({
+        type: "doc",
+        content: [{ type: "paragraph" }],
+      });
+      editor.view.dispatch(editor.state.tr.setMeta(claimFlagsKey, []));
+      // Fresh notes start empty locally — never GET-overwrite while the user types.
+      hydratedNoteId.current = noteId;
+      loadingContent.current = false;
+      setSaveState("saved");
+      setReady(true);
+      setMinimapRevision((value) => value + 1);
+      return () => {
+        void saveNowRef.current();
+        loadingContent.current = true;
+        hydratedNoteId.current = null;
+        if (saveTimer.current) window.clearTimeout(saveTimer.current);
+      };
+    }
+
     let cancelled = false;
 
     void (async () => {
       const response = await fetch(`/api/notes/${noteId}`);
-      if (!response.ok || cancelled) return;
+      if (cancelled || noteIdRef.current !== noteId) return;
+      if (!response.ok) {
+        setLoadError(true);
+        setReady(true);
+        return;
+      }
       const data = (await response.json()) as NotePayload;
       if (cancelled || noteIdRef.current !== noteId) return;
       editor.commands.setContent(data.note.content);
@@ -397,16 +472,20 @@ export function NoteEditor({
       setSaveState("saved");
       hydratedNoteId.current = noteId;
       loadingContent.current = false;
+      setReady(true);
       setMinimapRevision((value) => value + 1);
     })();
 
     return () => {
       cancelled = true;
+      // Flush pending edits for this note before hydration flags clear.
+      void saveNowRef.current();
       loadingContent.current = true;
       hydratedNoteId.current = null;
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [editor, noteId]);
+    // shellTitle intentionally omitted — sidebar renames must not re-hydrate/wipe body.
+  }, [editor, fresh, noteId]);
 
   function applyClaims(claims: ClaimFlag[]) {
     claimsRef.current = claims;
@@ -475,8 +554,11 @@ export function NoteEditor({
         status: "running",
         log: "+ saving note",
       });
-      await saveNow();
+      const saved = await saveNow();
       if (gen !== pipelineGenRef.current) return;
+      if (!saved) {
+        throw new Error("Save failed");
+      }
       updateStep(gen, "save", {
         status: "success",
         log: "✓ note saved",
@@ -498,6 +580,7 @@ export function NoteEditor({
         const { note } = (await response.json()) as { note: NoteDetail };
         if (gen !== pipelineGenRef.current) return;
         setPayload((current) => (current ? { ...current, note } : current));
+        await onTreeChanged();
         updateStep(gen, "publish", {
           status: "success",
           log: "✓ status set to published",
@@ -826,16 +909,20 @@ export function NoteEditor({
       const response = await fetch(`/api/notes/${noteId}/gaps`, {
         method: "POST",
       });
-      if (response.ok) {
-        const data = (await response.json()) as {
-          checklist: ChecklistItem[];
-          message?: string | null;
-        };
-        setPayload((current) =>
-          current ? { ...current, checklist: data.checklist } : current,
-        );
-        setGapsMessage(data.message ?? "");
+      if (!response.ok) {
+        toast.error("Gap analysis failed");
+        return;
       }
+      const data = (await response.json()) as {
+        checklist: ChecklistItem[];
+        message?: string | null;
+      };
+      setPayload((current) =>
+        current ? { ...current, checklist: data.checklist } : current,
+      );
+      setGapsMessage(data.message ?? "");
+    } catch {
+      toast.error("Gap analysis failed");
     } finally {
       setGapsLoading(false);
     }
@@ -853,11 +940,24 @@ export function NoteEditor({
           }
         : current,
     );
-    await fetch(`/api/checklist/${item.id}`, {
+    const response = await fetch(`/api/checklist/${item.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ticked }),
     });
+    if (!response.ok) {
+      setPayload((current) =>
+        current
+          ? {
+              ...current,
+              checklist: current.checklist.map((entry) =>
+                entry.id === item.id ? item : entry,
+              ),
+            }
+          : current,
+      );
+      toast.error("Could not update gap item");
+    }
   }
 
   async function deleteChecklist(item: ChecklistItem) {
@@ -882,11 +982,32 @@ export function NoteEditor({
     }
   }
 
-  if (!payload || !editor) {
+  if (loadError) {
     return (
-      <div className="grid h-dvh flex-1 place-items-center text-xs text-muted-foreground md:h-screen">
-        Loading note…
+      <div className="flex min-w-0 flex-1">
+        <main className="relative flex h-dvh min-w-0 flex-1 flex-col items-center justify-center gap-3 px-6 md:h-screen">
+          {sidebarCollapsed ? (
+            <button
+              className="icon-button absolute left-3 top-3 sm:left-4 sm:top-4"
+              onClick={onOpenSidebar}
+              aria-label="Open sidebar"
+            >
+              <PanelLeftOpen size={16} />
+            </button>
+          ) : null}
+          <AlertCircle size={20} className="text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Could not load note</p>
+        </main>
       </div>
+    );
+  }
+
+  if (!editor || !ready || !payload) {
+    return (
+      <NoteEditorSkeleton
+        sidebarCollapsed={sidebarCollapsed}
+        onOpenSidebar={onOpenSidebar}
+      />
     );
   }
 
@@ -1298,3 +1419,98 @@ export function NoteEditor({
     </div>
   );
 }
+
+function NoteEditorSkeleton({
+  sidebarCollapsed,
+  onOpenSidebar,
+}: {
+  sidebarCollapsed: boolean;
+  onOpenSidebar: () => void;
+}) {
+  return (
+    <div
+      className="flex min-w-0 flex-1"
+      aria-busy="true"
+      aria-label="Loading note"
+    >
+      <main className="relative flex h-dvh min-w-0 flex-1 flex-col md:h-screen">
+        <header className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2 sm:h-14 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
+          <div className="flex min-w-0 items-center gap-2">
+            {sidebarCollapsed ? (
+              <button
+                className="icon-button shrink-0"
+                onClick={onOpenSidebar}
+                aria-label="Open sidebar"
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            ) : null}
+            <span className="truncate text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              draft
+            </span>
+          </div>
+          <div className="ml-auto flex items-center justify-end gap-1.5 overflow-x-auto sm:gap-2">
+            <button
+              type="button"
+              disabled
+              className="topbar-button"
+              aria-label="Read-only"
+            >
+              <BookOpen size={13} />
+              <span className="topbar-label">Read-only</span>
+            </button>
+            <button
+              type="button"
+              disabled
+              className="topbar-button"
+              aria-label="Fact-check"
+            >
+              <ScanSearch size={13} />
+              <span className="topbar-label">Fact-check</span>
+            </button>
+            <button
+              type="button"
+              disabled
+              className="topbar-button solid"
+              aria-label="Publish"
+            >
+              <span>Publish</span>
+            </button>
+            <button
+              type="button"
+              disabled
+              className="icon-button relative shrink-0"
+              aria-label="Open activity"
+            >
+              <PanelRightOpen size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <article className="w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20">
+            <Skeleton className="mb-3 h-9 w-[72%] max-w-xl sm:h-11" />
+            <div className="flex flex-col gap-2.5">
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-[97%]" />
+              <Skeleton className="h-3 w-[94%]" />
+              <Skeleton className="h-3 w-[88%]" />
+              <Skeleton className="h-3 w-[61%]" />
+              <Skeleton className="mt-3 h-3 w-full" />
+              <Skeleton className="h-3 w-[96%]" />
+              <Skeleton className="h-3 w-[91%]" />
+              <Skeleton className="h-3 w-[85%]" />
+              <Skeleton className="h-3 w-[73%]" />
+              <Skeleton className="mt-3 h-3 w-full" />
+              <Skeleton className="h-3 w-[93%]" />
+              <Skeleton className="h-3 w-[89%]" />
+              <Skeleton className="h-3 w-[80%]" />
+              <Skeleton className="h-3 w-[54%]" />
+            </div>
+          </article>
+        </div>
+      </main>
+    </div>
+  );
+}
+

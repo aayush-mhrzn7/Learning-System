@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type TrashBatch = {
   batchId: string;
@@ -25,24 +26,35 @@ type TrashBatch = {
 
 type ConfirmAction =
   | { kind: "empty" }
+  | { kind: "restore-all" }
   | { kind: "delete"; batch: TrashBatch };
 
 export default function TrashPage() {
   const [batches, setBatches] = useState<TrashBatch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [emptying, setEmptying] = useState(false);
+  const [restoringAll, setRestoringAll] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
     null,
   );
 
   async function load() {
-    const response = await fetch("/api/trash");
-    if (response.ok) {
+    setLoadError(false);
+    try {
+      const response = await fetch("/api/trash");
+      if (!response.ok) {
+        setLoadError(true);
+        return;
+      }
       const data = (await response.json()) as { batches: TrashBatch[] };
       setBatches(data.batches);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -50,7 +62,7 @@ export default function TrashPage() {
   }, []);
 
   async function restore(batchId: string) {
-    if (pendingId || emptying) return;
+    if (pendingId || emptying || restoringAll) return;
     const previous = batches;
     setPendingId(batchId);
     const toastId = toast.loading("Restoring…");
@@ -70,8 +82,28 @@ export default function TrashPage() {
     }
   }
 
+  async function restoreAll() {
+    if (pendingId || emptying || restoringAll || batches.length === 0) return;
+    const previous = batches;
+    setRestoringAll(true);
+    setConfirmAction(null);
+    const toastId = toast.loading("Restoring…");
+    setBatches([]);
+    try {
+      const response = await fetch("/api/trash", { method: "POST" });
+      if (!response.ok) {
+        setBatches(previous);
+        toast.error("Could not restore Trash", { id: toastId });
+        return;
+      }
+      toast.success("Restored all", { id: toastId });
+    } finally {
+      setRestoringAll(false);
+    }
+  }
+
   async function remove(batch: TrashBatch) {
-    if (pendingId || emptying) return;
+    if (pendingId || emptying || restoringAll) return;
     const previous = batches;
     setPendingId(batch.batchId);
     setConfirmAction(null);
@@ -95,7 +127,7 @@ export default function TrashPage() {
   }
 
   async function removeAll() {
-    if (pendingId || emptying || batches.length === 0) return;
+    if (pendingId || emptying || restoringAll || batches.length === 0) return;
     const previous = batches;
     setEmptying(true);
     setConfirmAction(null);
@@ -114,16 +146,20 @@ export default function TrashPage() {
     }
   }
 
-  const busy = emptying || Boolean(pendingId);
+  const busy = emptying || restoringAll || Boolean(pendingId);
 
   return (
     <main className="min-h-screen bg-background px-4 py-10 text-foreground sm:px-10 sm:py-16">
       <div className="mx-auto w-full max-w-2xl">
         <div className="mb-8 flex flex-col gap-5 sm:mb-10 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div>
-            <p className="mb-6 text-[13px] uppercase tracking-[0.22em] text-muted-foreground sm:mb-8">
-              Learning System
-            </p>
+            <Link
+              href="/"
+              className="mb-6 inline-flex items-center gap-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground sm:mb-8"
+            >
+              <ChevronLeft size={14} />
+              back
+            </Link>
             <h1 className="text-[28px] font-medium leading-tight tracking-[-0.035em]">
               Trash
             </h1>
@@ -132,8 +168,15 @@ export default function TrashPage() {
               good.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {!loading && batches.length > 0 ? (
+          {!loading && batches.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => setConfirmAction({ kind: "restore-all" })}
+              >
+                {restoringAll ? "Restoring…" : "Restore all"}
+              </Button>
               <Button
                 variant="destructive"
                 disabled={busy}
@@ -141,20 +184,51 @@ export default function TrashPage() {
               >
                 {emptying ? "Emptying…" : "Delete all"}
               </Button>
-            ) : null}
-            <Button asChild variant="outline">
-              <Link href="/">Back</Link>
-            </Button>
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="overflow-hidden rounded-[10px] border border-[#262626] bg-[#111]">
           {loading ? (
-            <p className="px-5 py-12 text-center text-[15px] text-muted-foreground">
-              Loading…
-            </p>
+            <div
+              className="flex flex-col"
+              aria-busy="true"
+              aria-label="Loading trash"
+            >
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={`trash-skel-${i}`}
+                  className="flex items-center gap-3 border-b border-[#1c1c1c] px-5 py-4 last:border-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-40 max-w-[70%]" />
+                    <Skeleton className="mt-2 h-3.5 w-28" />
+                  </div>
+                  <Skeleton className="size-8 rounded-md" />
+                  <Skeleton className="size-8 rounded-md" />
+                </div>
+              ))}
+            </div>
           ) : null}
-          {!loading && batches.length === 0 ? (
+          {!loading && loadError ? (
+            <div className="px-5 py-12 text-center">
+              <p className="text-[15px] text-muted-foreground">
+                Could not load Trash
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setLoading(true);
+                  void load();
+                }}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          {!loading && !loadError && batches.length === 0 ? (
             <p className="px-5 py-12 text-center text-[15px] text-muted-foreground">
               Trash is empty
             </p>
@@ -222,12 +296,16 @@ export default function TrashPage() {
             <DialogTitle>
               {confirmAction?.kind === "empty"
                 ? "Empty Trash?"
-                : "Permanently delete?"}
+                : confirmAction?.kind === "restore-all"
+                  ? "Restore all?"
+                  : "Permanently delete?"}
             </DialogTitle>
             <DialogDescription>
               {confirmAction?.kind === "empty"
                 ? "Every item in Trash will be permanently deleted."
-                : `“${confirmAction?.batch.name}” and its contents cannot be recovered.`}
+                : confirmAction?.kind === "restore-all"
+                  ? "Every item in Trash will be restored to your workspace."
+                  : `“${confirmAction?.batch.name}” and its contents cannot be recovered.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -242,12 +320,18 @@ export default function TrashPage() {
             </Button>
             <Button
               type="button"
-              variant="destructive"
+              variant={
+                confirmAction?.kind === "restore-all"
+                  ? "default"
+                  : "destructive"
+              }
               size="sm"
               disabled={busy}
               onClick={() => {
                 if (confirmAction?.kind === "empty") void removeAll();
-                else if (confirmAction?.kind === "delete") {
+                else if (confirmAction?.kind === "restore-all") {
+                  void restoreAll();
+                } else if (confirmAction?.kind === "delete") {
                   void remove(confirmAction.batch);
                 }
               }}
@@ -256,9 +340,13 @@ export default function TrashPage() {
                 ? emptying
                   ? "Emptying…"
                   : "Delete all permanently"
-                : pendingId
-                  ? "Deleting…"
-                  : "Delete permanently"}
+                : confirmAction?.kind === "restore-all"
+                  ? restoringAll
+                    ? "Restoring…"
+                    : "Restore all"
+                  : pendingId
+                    ? "Deleting…"
+                    : "Delete permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>

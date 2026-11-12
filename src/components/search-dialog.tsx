@@ -1,8 +1,9 @@
 "use client";
 
-import { LoaderCircle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type SearchResult = {
   id: string;
@@ -81,10 +82,19 @@ export function SearchDialog({
         </div>
         <div className="max-h-[55vh] overflow-y-auto p-1.5">
           {searching ? (
-            <p className="flex items-center justify-center gap-2 px-3 py-8 text-[15px] text-muted-foreground">
-              <LoaderCircle size={14} className="animate-spin" />
-              Searching…
-            </p>
+            <div
+              className="flex flex-col gap-1 p-1"
+              aria-busy="true"
+              aria-label="Searching"
+            >
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={`search-skel-${i}`} className="rounded-[6px] px-3 py-2.5">
+                  <Skeleton className="h-4 w-44 max-w-[70%]" />
+                  <Skeleton className="mt-1.5 h-3 w-28" />
+                  <Skeleton className="mt-2 h-3.5 w-full" />
+                </div>
+              ))}
+            </div>
           ) : null}
           {!searching && query && results.length === 0 ? (
             <p className="px-3 py-8 text-center text-[15px] text-muted-foreground">

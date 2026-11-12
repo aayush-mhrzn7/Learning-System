@@ -1,14 +1,19 @@
 "use client";
 
-import { FolderPlus, PanelLeftOpen } from "lucide-react";
+import {
+  Activity,
+  FolderPlus,
+  GraphStar,
+  LogOut,
+  PanelLeftOpen,
+  Search,
+  Settings,
+  Trash2,
+} from "lucide-react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { KnowledgeGraph } from "@/components/knowledge-graph";
-import { NoteEditor } from "@/components/note-editor";
-import { SearchDialog } from "@/components/search-dialog";
-import { SettingsDialog } from "@/components/settings-dialog";
+import { toast } from "sonner";
 import { Sidebar } from "@/components/sidebar";
-import { UsagePage } from "@/components/usage-page";
-import { VisualizeNote } from "@/components/visualize-note";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,8 +24,40 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { apiFetch } from "@/lib/api";
 import type { TreePayload } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const NoteEditor = dynamic(
+  () =>
+    import("@/components/note-editor").then((mod) => mod.NoteEditor),
+  { ssr: false },
+);
+const KnowledgeGraph = dynamic(
+  () =>
+    import("@/components/knowledge-graph").then((mod) => mod.KnowledgeGraph),
+  { ssr: false },
+);
+const VisualizeNote = dynamic(
+  () =>
+    import("@/components/visualize-note").then((mod) => mod.VisualizeNote),
+  { ssr: false },
+);
+const UsagePage = dynamic(
+  () => import("@/components/usage-page").then((mod) => mod.UsagePage),
+  { ssr: false },
+);
+const SearchDialog = dynamic(
+  () =>
+    import("@/components/search-dialog").then((mod) => mod.SearchDialog),
+  { ssr: false },
+);
+const SettingsDialog = dynamic(
+  () =>
+    import("@/components/settings-dialog").then((mod) => mod.SettingsDialog),
+  { ssr: false },
+);
 
 const emptyTree: TreePayload = { directories: [], notes: [] };
 const MOBILE_MQ = "(max-width: 767px)";
@@ -44,10 +81,12 @@ export function Workspace() {
   const [firstDirectoryName, setFirstDirectoryName] = useState("");
   const [creatingDirectory, setCreatingDirectory] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [freshNoteId, setFreshNoteId] = useState<string | null>(null);
 
-  const openNote = useCallback((id: string) => {
+  const openNote = useCallback((id: string, options?: { fresh?: boolean }) => {
     setGraphOpen(false);
     setUsageOpen(false);
+    setFreshNoteId(options?.fresh ? id : null);
     setSelectedNoteId(id);
     localStorage.setItem("learning-last-note", id);
     if (isMobileViewport()) setSidebarCollapsed(true);
@@ -55,7 +94,7 @@ export function Workspace() {
 
   const loadTree = useCallback(
     async (preferredNoteId?: string) => {
-      const response = await fetch("/api/tree");
+      const response = await apiFetch("/api/tree");
       if (!response.ok) return;
       const data = (await response.json()) as TreePayload;
       treeRef.current = data;
@@ -188,29 +227,29 @@ export function Workspace() {
       ],
     }));
     try {
-      const response = await fetch("/api/directories", {
+      const response = await apiFetch("/api/directories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: firstDirectoryName, parentId: null }),
       });
       if (!response.ok) {
         applyOptimisticTree(() => previous);
+        toast.error("Could not create directory");
         return;
       }
       setFirstDirectoryOpen(false);
       await loadTree();
       setFirstDirectoryName("");
+    } catch {
+      applyOptimisticTree(() => previous);
+      toast.error("Could not create directory");
     } finally {
       setCreatingDirectory(false);
     }
   }
 
   if (!loaded) {
-    return (
-      <main className="grid min-h-screen place-items-center text-xs text-muted-foreground">
-        Loading…
-      </main>
-    );
+    return <WorkspaceSkeleton />;
   }
 
   const sidebarOpen = !sidebarCollapsed;
@@ -280,6 +319,10 @@ export function Workspace() {
           <VisualizeNote
             key={selectedNoteId}
             noteId={selectedNoteId}
+            fresh={freshNoteId === selectedNoteId}
+            initialTitle={
+              tree.notes.find((note) => note.id === selectedNoteId)?.title
+            }
             sidebarCollapsed={sidebarCollapsed}
             onOpenSidebar={openSidebar}
             onTitleChange={onNoteTitleChange}
@@ -288,6 +331,10 @@ export function Workspace() {
           <NoteEditor
             key={selectedNoteId}
             noteId={selectedNoteId}
+            fresh={freshNoteId === selectedNoteId}
+            initialTitle={
+              tree.notes.find((note) => note.id === selectedNoteId)?.title
+            }
             sidebarCollapsed={sidebarCollapsed}
             onOpenSidebar={openSidebar}
             onTreeChanged={loadTree}
@@ -369,6 +416,91 @@ export function Workspace() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function WorkspaceSkeleton() {
+  return (
+    <div
+      className="flex h-dvh overflow-hidden bg-background text-foreground"
+      aria-busy="true"
+      aria-label="Loading workspace"
+    >
+      <aside className="hidden h-full w-[340px] shrink-0 flex-col border-r border-border bg-[#080808] md:flex">
+        <div className="flex h-14 items-center border-b border-border px-3 sm:px-4">
+          <span className="text-xs font-medium uppercase tracking-[0.2em]">
+            Learning
+          </span>
+        </div>
+
+        <div className="mx-3 mt-3 flex h-10 items-center gap-2 border border-border px-3 text-xs text-muted-foreground sm:h-9">
+          <Search size={14} />
+          Search
+          <kbd className="ml-auto hidden font-mono text-[12px] sm:inline">
+            ⌘K
+          </kbd>
+        </div>
+
+        <div className="mx-3 mt-2 flex h-10 items-center gap-2 border border-border px-3 text-xs text-muted-foreground sm:h-9">
+          <GraphStar size={14} />
+          Knowledge graph
+        </div>
+
+        <div className="flex flex-1 flex-col gap-2 overflow-hidden px-3 py-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Skeleton
+              key={`tree-${i}`}
+              className="h-7"
+              style={{
+                width: `${48 + ((i * 17) % 40)}%`,
+                marginLeft: `${(i % 3) * 12}px`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="border-t border-border p-2">
+          <div className="sidebar-row w-full text-muted-foreground">
+            <Activity size={14} />
+            Usage
+          </div>
+          <div className="sidebar-row w-full text-muted-foreground">
+            <Settings size={14} />
+            Settings
+          </div>
+          <div className="sidebar-row w-full text-muted-foreground">
+            <Trash2 size={14} />
+            Trash
+          </div>
+          <div className="sidebar-row w-full text-muted-foreground">
+            <LogOut size={14} />
+            Log out
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-hidden px-4 pt-8 sm:px-14 sm:pt-12 lg:px-20">
+          <Skeleton className="mb-8 h-10 w-2/3 max-w-lg" />
+          <div className="flex flex-col gap-2.5">
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-[96%]" />
+            <Skeleton className="h-3.5 w-[91%]" />
+            <Skeleton className="h-3.5 w-[94%]" />
+            <Skeleton className="h-3.5 w-[88%]" />
+            <Skeleton className="mt-5 h-3.5 w-[72%]" />
+            <Skeleton className="h-3.5 w-[90%]" />
+            <Skeleton className="h-3.5 w-[85%]" />
+            <Skeleton className="h-3.5 w-[93%]" />
+            <Skeleton className="h-3.5 w-[78%]" />
+            <Skeleton className="mt-5 h-3.5 w-[65%]" />
+            <Skeleton className="h-3.5 w-[87%]" />
+            <Skeleton className="h-3.5 w-[81%]" />
+            <Skeleton className="h-3.5 w-[58%]" />
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

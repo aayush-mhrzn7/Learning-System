@@ -95,7 +95,7 @@ function readSidebarWidth() {
 type SidebarProps = {
   tree: TreePayload;
   selectedNoteId: string | null;
-  onOpenNote: (id: string) => void;
+  onOpenNote: (id: string, options?: { fresh?: boolean }) => void;
   onChanged: (preferredNoteId?: string) => Promise<void>;
   onOptimisticTree: (updater: (tree: TreePayload) => TreePayload) => void;
   onCollapse: () => void;
@@ -529,7 +529,7 @@ export function Sidebar(props: SidebarProps) {
               : item,
           ),
         }));
-        props.onOpenNote(note.id);
+        props.onOpenNote(note.id, { fresh: true });
       }
 
       if (editAction.kind === "directory" && editAction.mode === "rename") {

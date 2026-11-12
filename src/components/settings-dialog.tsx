@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   FONT_SIZE_LABELS,
   FONT_SIZE_OPTIONS,
@@ -531,7 +532,26 @@ export function SettingsDialog({
 
             <div className="min-w-0 flex-1 overflow-y-auto p-5">
               {loading ? (
-                <p className="text-xs text-zinc-500">Loading…</p>
+                <div
+                  className="flex flex-col gap-5"
+                  aria-busy="true"
+                  aria-label="Loading settings"
+                >
+                  <div className="mb-1 flex items-center gap-3">
+                    <Skeleton className="size-10 rounded-lg" />
+                    <div className="min-w-0 flex-1">
+                      <Skeleton className="h-4 w-28" />
+                      <Skeleton className="mt-2 h-3 w-48 max-w-full" />
+                    </div>
+                  </div>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={`settings-skel-${i}`} className="flex flex-col gap-2">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-3 w-56 max-w-full" />
+                      <Skeleton className="h-9 w-full" />
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <>
                   <div className="mb-6 flex items-center gap-3">

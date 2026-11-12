@@ -1,6 +1,6 @@
 "use client";
 
-import * as d3 from "d3";
+import { select } from "d3";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -234,7 +234,7 @@ export function VisualizeDiagramView({
     const layout = layoutDiagram(diagram, width);
     const byId = new Map(layout.nodes.map((node) => [node.id, node]));
 
-    const svg = d3.select(svgEl);
+    const svg = select(svgEl);
     svg.selectAll("*").remove();
     svg.attr("viewBox", `0 0 ${layout.width} ${layout.height}`);
     svgEl.style.height = `${layout.height}px`;

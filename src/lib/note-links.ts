@@ -22,6 +22,8 @@ export async function syncWikiLinksFromPlainText(
   sourceNoteId: string,
   plainText: string,
 ) {
+  // Most autosaves have no wiki links — skip the candidate-note scan.
+  if (!plainText.includes("[[")) return;
   const titles = extractWikiLinkTitles(plainText);
   if (titles.length === 0) return;
 

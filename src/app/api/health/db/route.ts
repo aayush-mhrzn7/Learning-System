@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
+import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 
 export async function GET() {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
   try {
     const result = await db.execute<{ now: string }>(sql`select now() as now`);
     const rows = Array.isArray(result) ? result : result.rows;
@@ -13,16 +17,13 @@ export async function GET() {
       orm: "drizzle",
       now,
     });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Database unavailable";
-
+  } catch {
     return Response.json(
       {
         ok: false,
         engine: "neon",
         orm: "drizzle",
-        error: message,
+        error: "Database unavailable",
       },
       { status: 503 },
     );

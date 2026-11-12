@@ -97,6 +97,8 @@ export const directories = pgTable(
     index("directories_parent_idx").on(table.parentId),
     index("directories_deleted_idx").on(table.deletedAt),
     index("directories_delete_batch_idx").on(table.deleteBatchId),
+    // Tree/list queries filter by owner + not-deleted; migrate when convenient.
+    index("directories_user_deleted_idx").on(table.userId, table.deletedAt),
   ],
 );
 
@@ -141,6 +143,8 @@ export const notes = pgTable(
     index("notes_deleted_idx").on(table.deletedAt),
     index("notes_delete_batch_idx").on(table.deleteBatchId),
     index("notes_updated_idx").on(table.updatedAt),
+    // Tree/list/search filter by owner + not-deleted; migrate when convenient.
+    index("notes_user_deleted_idx").on(table.userId, table.deletedAt),
     index("notes_search_idx").using(
       "gin",
       sql`(

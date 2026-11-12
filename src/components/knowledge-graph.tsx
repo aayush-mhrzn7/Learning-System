@@ -1,9 +1,26 @@
 "use client";
 
-import * as d3 from "d3";
-import { GraphStar, LoaderCircle, PanelLeftOpen, Settings } from "lucide-react";
+import {
+  drag,
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  select,
+  transition,
+  zoom,
+  zoomIdentity,
+  type Selection,
+  type ZoomBehavior,
+} from "d3";
+
+// Ensure selection.prototype.transition is registered for fit-to-view.
+void transition;
+import { GraphStar, PanelLeftOpen, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { NoteKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -54,11 +71,11 @@ function nodeFill(node: SimNode) {
 }
 
 function appendNodeShape(
-  selection: d3.Selection<SVGGElement, SimNode, SVGGElement, unknown>,
+  selection: Selection<SVGGElement, SimNode, SVGGElement, unknown>,
 ) {
   // Writing notes stay round; visualize notes are diamonds so kinds read at a glance.
   selection.each(function (d) {
-    const g = d3.select(this);
+    const g = select(this);
     const r = nodeRadius(d);
     if (d.type === "note" && d.kind === "visualize") {
       g.append("rect")
@@ -123,10 +140,10 @@ export function KnowledgeGraph({
   const alwaysShowLabelsRef = useRef(false);
   const scaleRef = useRef(1);
   const labelSelRef =
-    useRef<d3.Selection<SVGTextElement, SimNode, SVGGElement, unknown> | null>(
+    useRef<Selection<SVGTextElement, SimNode, SVGGElement, unknown> | null>(
       null,
     );
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const simNodesRef = useRef<SimNode[]>([]);
 
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -177,9 +194,9 @@ export function KnowledgeGraph({
   const centerOnNodes = useCallback(() => {
     const svgEl = svgRef.current;
     const wrap = wrapRef.current;
-    const zoom = zoomRef.current;
+    const zoomBehavior = zoomRef.current;
     const simNodes = simNodesRef.current;
-    if (!svgEl || !wrap || !zoom || simNodes.length === 0) return;
+    if (!svgEl || !wrap || !zoomBehavior || simNodes.length === 0) return;
 
     const width = wrap.clientWidth || 800;
     const height = Math.max(wrap.clientHeight || 560, 420);
@@ -213,15 +230,15 @@ export function KnowledgeGraph({
           ),
       ),
     );
-    const transform = d3.zoomIdentity
+    const transform = zoomIdentity
       .translate(width / 2, height / 2)
       .scale(scale)
       .translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
 
-    d3.select(svgEl)
+    select(svgEl)
       .transition()
       .duration(450)
-      .call(zoom.transform, transform);
+      .call(zoomBehavior.transform, transform);
   }, []);
 
   useEffect(() => {
@@ -249,18 +266,16 @@ export function KnowledgeGraph({
     }));
     simNodesRef.current = simNodes;
 
-    const svg = d3.select(svgEl);
+    const svg = select(svgEl);
     svg.selectAll("*").remove();
     svg.attr("viewBox", `0 0 ${width} ${height}`);
 
     const viewport = svg.append("g");
 
-    const simulation = d3
-      .forceSimulation(simNodes)
+    const simulation = forceSimulation(simNodes)
       .force(
         "link",
-        d3
-          .forceLink<SimNode, SimLink>(simLinks)
+        forceLink<SimNode, SimLink>(simLinks)
           .id((d) => d.id)
           .distance((d) => {
             const source = d.source as SimNode;
@@ -272,12 +287,14 @@ export function KnowledgeGraph({
           })
           .strength(0.85),
       )
-      .force("charge", d3.forceManyBody().strength(-220))
-      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("charge", forceManyBody().strength(-220))
+      .force("center", forceCenter(width / 2, height / 2))
       .force(
         "collide",
-        d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 18),
-      );
+        forceCollide<SimNode>().radius((d) => nodeRadius(d) + 18),
+      )
+      .alphaDecay(0.06)
+      .alphaMin(0.03);
 
     const link = viewport
       .append("g")
@@ -299,8 +316,7 @@ export function KnowledgeGraph({
           : "cursor-grab active:cursor-grabbing",
       )
       .call(
-        d3
-          .drag<SVGGElement, SimNode>()
+        drag<SVGGElement, SimNode>()
           .on("start", (event, d) => {
             if (!event.active) simulation.alphaTarget(0.28).restart();
             d.fx = d.x;
@@ -364,15 +380,14 @@ export function KnowledgeGraph({
         );
     }
 
-    const zoom = d3
-      .zoom<SVGSVGElement, unknown>()
+    const zoomBehavior = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.25, 4])
       .on("zoom", (event) => {
         viewport.attr("transform", event.transform.toString());
         syncLabelScale(event.transform.k);
       });
-    zoomRef.current = zoom;
-    svg.call(zoom);
+    zoomRef.current = zoomBehavior;
+    svg.call(zoomBehavior);
     syncLabelScale(1);
 
     simulation.on("tick", () => {
@@ -382,6 +397,7 @@ export function KnowledgeGraph({
         .attr("x2", (d) => (d.target as SimNode).x ?? 0)
         .attr("y2", (d) => (d.target as SimNode).y ?? 0);
       node.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+      if (simulation.alpha() < 0.03) simulation.stop();
     });
 
     return () => {
@@ -426,11 +442,26 @@ export function KnowledgeGraph({
 
       <div ref={wrapRef} className="relative min-h-0 flex-1">
         {loading ? (
-          <div className="grid h-full place-items-center text-xs text-[#777]">
-            <span className="inline-flex items-center gap-2">
-              <LoaderCircle size={14} className="animate-spin" />
-              Loading graph…
-            </span>
+          <div
+            className="relative grid h-full place-items-center bg-black"
+            aria-busy="true"
+            aria-label="Loading graph"
+          >
+            <div className="absolute inset-0 opacity-40">
+              <Skeleton className="absolute left-[18%] top-[28%] size-3 rounded-full" />
+              <Skeleton className="absolute left-[42%] top-[22%] size-3 rounded-full" />
+              <Skeleton className="absolute left-[62%] top-[36%] size-3 rounded-full" />
+              <Skeleton className="absolute left-[28%] top-[52%] size-3 rounded-full" />
+              <Skeleton className="absolute left-[52%] top-[58%] size-3 rounded-full" />
+              <Skeleton className="absolute left-[72%] top-[48%] size-3 rounded-full" />
+              <Skeleton className="absolute left-[35%] top-[38%] h-px w-[18%]" />
+              <Skeleton className="absolute left-[48%] top-[30%] h-px w-[14%]" />
+              <Skeleton className="absolute left-[45%] top-[48%] h-px w-[16%]" />
+            </div>
+            <div className="relative z-10 flex flex-col items-center gap-2">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-3 w-40" />
+            </div>
           </div>
         ) : !hasContent ? (
           <div className="grid h-full place-items-center px-6 text-center text-sm text-[#777]">

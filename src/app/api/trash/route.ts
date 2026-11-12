@@ -66,6 +66,25 @@ export async function GET() {
   return Response.json({ batches: result.rows });
 }
 
+export async function POST() {
+  const { userId, error } = await requireUserId();
+  if (error || !userId) return error!;
+
+  await db.execute(sql`
+    WITH restored_directories AS (
+      UPDATE directories
+      SET deleted_at = NULL, delete_batch_id = NULL
+      WHERE deleted_at IS NOT NULL AND user_id = ${userId}::uuid
+      RETURNING id
+    )
+    UPDATE notes
+    SET deleted_at = NULL, delete_batch_id = NULL
+    WHERE deleted_at IS NOT NULL AND user_id = ${userId}::uuid
+  `);
+
+  return Response.json({ ok: true });
+}
+
 export async function DELETE() {
   const { userId, error } = await requireUserId();
   if (error || !userId) return error!;

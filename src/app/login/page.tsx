@@ -12,6 +12,14 @@ export default function LoginPage() {
   );
 }
 
+/** Same-origin relative paths only — blocks //evil, http(s):, etc. */
+function safeNextPath(value: string | null): string {
+  if (!value) return "/";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/";
+  if (value.includes("://") || value.includes("\\")) return "/";
+  return value;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,7 +47,7 @@ function LoginForm() {
       return;
     }
 
-    router.replace(searchParams.get("next") || "/");
+    router.replace(safeNextPath(searchParams.get("next")));
     router.refresh();
   }
 

@@ -9,26 +9,32 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { VisualizeDiagramView } from "@/components/visualize-diagram";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { VisualizeState } from "@/db/schema";
 import type { NoteDetail } from "@/lib/types";
 import { emptyVisualize, normalizeVisualize } from "@/lib/visualize";
 
 export function VisualizeNote({
   noteId,
+  fresh = false,
+  initialTitle,
   sidebarCollapsed,
   onOpenSidebar,
   onTitleChange,
 }: {
   noteId: string;
+  fresh?: boolean;
+  initialTitle?: string;
   sidebarCollapsed: boolean;
   onOpenSidebar: () => void;
   onTitleChange: (noteId: string, title: string) => void;
 }) {
-  const [title, setTitle] = useState("Untitled");
+  const shellTitle = initialTitle?.trim() || "Untitled";
+  const [title, setTitle] = useState(fresh ? shellTitle : "Untitled");
   const [visualize, setVisualize] = useState<VisualizeState>(emptyVisualize);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(fresh);
   const [started, setStarted] = useState(false);
   const [streamReply, setStreamReply] = useState("");
   const [streamExplanation, setStreamExplanation] = useState("");
@@ -39,32 +45,50 @@ export function VisualizeNote({
     () => new Set(),
   );
 
+  const mountedRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-    setLoaded(false);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const ac = new AbortController();
     setDraft("");
     setBusy(false);
-    setStarted(false);
     setStreamReply("");
     setStreamExplanation("");
+    setLoaded(fresh);
+    setStarted(false);
+    setVisualize(emptyVisualize);
+    setTitle(fresh ? shellTitle : "Untitled");
     void (async () => {
-      const response = await fetch(`/api/notes/${noteId}`);
-      if (!response.ok) {
+      try {
+        const response = await fetch(`/api/notes/${noteId}`, {
+          signal: ac.signal,
+        });
+        if (!response.ok) {
+          toast.error("Could not load visualize note");
+          return;
+        }
+        const data = (await response.json()) as { note: NoteDetail };
+        if (ac.signal.aborted) return;
+        const next = normalizeVisualize(data.note.visualize);
+        setTitle(data.note.title);
+        setVisualize(next);
+        setStarted(next.messages.length > 0);
+        setLoaded(true);
+      } catch {
+        if (ac.signal.aborted) return;
         toast.error("Could not load visualize note");
-        return;
       }
-      const data = (await response.json()) as { note: NoteDetail };
-      if (cancelled) return;
-      const next = normalizeVisualize(data.note.visualize);
-      setTitle(data.note.title);
-      setVisualize(next);
-      setStarted(next.messages.length > 0);
-      setLoaded(true);
     })();
     return () => {
-      cancelled = true;
+      ac.abort();
     };
-  }, [noteId]);
+    // shellTitle omitted — sidebar renames must not remount visualize state.
+  }, [fresh, noteId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "nearest" });
@@ -166,11 +190,13 @@ export function VisualizeNote({
     setStreamReply("");
     setStreamExplanation("");
 
+    const ac = new AbortController();
     try {
       const response = await fetch(`/api/notes/${noteId}/visualize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message }),
+        signal: ac.signal,
       });
       if (!response.ok || !response.body) {
         const fail = (await response.json().catch(() => null)) as {
@@ -185,6 +211,10 @@ export function VisualizeNote({
       let sawDone = false;
 
       while (true) {
+        if (!mountedRef.current) {
+          ac.abort();
+          break;
+        }
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -220,28 +250,55 @@ export function VisualizeNote({
         }
       }
 
+      if (!mountedRef.current) return;
       if (!sawDone) {
         throw new Error("Visualize stream ended early");
       }
     } catch (error) {
-      setVisualize(previous);
-      setStarted(previous.messages.length > 0);
-      setDraft(message);
-      setStreamReply("");
-      setStreamExplanation("");
-      toast.error(
-        error instanceof Error ? error.message : "Visualize request failed",
-      );
+      if (!mountedRef.current || (error instanceof DOMException && error.name === "AbortError")) {
+        return;
+      }
+      // Stream may have persisted on the server — prefer refetch over blind rollback.
+      let recovered = false;
+      try {
+        const response = await fetch(`/api/notes/${noteId}`);
+        if (response.ok) {
+          const data = (await response.json()) as { note: NoteDetail };
+          if (mountedRef.current) {
+            const next = normalizeVisualize(data.note.visualize);
+            setVisualize(next);
+            setStarted(next.messages.length > 0);
+            setTitle(data.note.title);
+            setDraft("");
+            recovered = true;
+          }
+        }
+      } catch {
+        // fall through to rollback
+      }
+      if (!recovered && mountedRef.current) {
+        setVisualize(previous);
+        setStarted(previous.messages.length > 0);
+        setDraft(message);
+      }
+      if (mountedRef.current) {
+        setStreamReply("");
+        setStreamExplanation("");
+        toast.error(
+          error instanceof Error ? error.message : "Visualize request failed",
+        );
+      }
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   }
 
   if (!loaded) {
     return (
-      <main className="grid min-w-0 flex-1 place-items-center text-xs text-muted-foreground">
-        Loading…
-      </main>
+      <VisualizeNoteSkeleton
+        sidebarCollapsed={sidebarCollapsed}
+        onOpenSidebar={onOpenSidebar}
+      />
     );
   }
 
@@ -530,3 +587,99 @@ function PromptBox({
     </div>
   );
 }
+
+function VisualizeNoteSkeleton({
+  sidebarCollapsed,
+  onOpenSidebar,
+}: {
+  sidebarCollapsed: boolean;
+  onOpenSidebar: () => void;
+}) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [draft, setDraft] = useState("");
+
+  return (
+    <main
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black"
+      aria-busy="true"
+      aria-label="Loading visualize note"
+    >
+      {sidebarCollapsed ? (
+        <button
+          onClick={onOpenSidebar}
+          className="icon-button absolute left-3 top-3 z-10 sm:left-4 sm:top-4"
+          aria-label="Open sidebar"
+        >
+          <PanelLeftOpen size={16} />
+        </button>
+      ) : null}
+
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
+        <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-[#888]">
+          <DiagramFlowHorizontal size={13} />
+          <Skeleton className="h-3.5 w-48 max-w-[60%]" />
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain pr-1">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-3.5 w-6" />
+              <Skeleton className="h-3.5 w-[70%] max-w-md" />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-[#222] bg-[#0a0a0a] px-4 py-6">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={`node-${i}`}
+                    className="flex flex-col items-center gap-2"
+                  >
+                    <Skeleton className="h-8 w-40 max-w-[70vw] rounded-md sm:w-52" />
+                    {i < 5 ? <Skeleton className="h-4 w-px" /> : null}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-3.5 w-full" />
+                <Skeleton className="h-3.5 w-[92%]" />
+                <Skeleton className="h-3.5 w-[85%]" />
+              </div>
+
+              <div className="rounded-lg border border-[#222] bg-[#0c0c0c] px-3 py-2">
+                <Skeleton className="mb-2 h-3 w-14" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="mt-2 h-4 w-[80%]" />
+              </div>
+
+              <div className="grid gap-2 rounded-lg border border-[#222] bg-[#0c0c0c] p-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <Skeleton className="mb-2 h-3 w-20" />
+                  <Skeleton className="h-3.5 w-full" />
+                  <Skeleton className="mt-2 h-3.5 w-[70%]" />
+                </div>
+                <div className="min-w-0">
+                  <Skeleton className="mb-2 h-3 w-24" />
+                  <Skeleton className="h-3.5 w-full" />
+                  <Skeleton className="mt-2 h-3.5 w-[65%]" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 shrink-0">
+          <PromptBox
+            inputRef={inputRef}
+            draft={draft}
+            setDraft={setDraft}
+            busy
+            onSend={() => {}}
+            placeholder="Ask another visualization…"
+          />
+        </div>
+      </div>
+    </main>
+  );
+}
+

@@ -1,9 +1,13 @@
 "use client";
 
 import { PanelLeftOpen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { UsageSummary } from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
+
+const RANGE_OPTIONS = [1, 7, 14] as const;
+const PAGE_SIZE = 10;
 
 function formatUsd(value: number) {
   if (value <= 0) return "$0";
@@ -158,7 +162,7 @@ export function UsagePage({
   sidebarCollapsed: boolean;
   onOpenSidebar: () => void;
 }) {
-  const [range, setRange] = useState(7);
+  const [range, setRange] = useState(1);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
 
@@ -208,7 +212,7 @@ export function UsagePage({
             aria-label="Range"
             className="flex shrink-0 rounded-md border border-border bg-black/40 p-0.5"
           >
-            {[7, 30, 90].map((days) => (
+            {RANGE_OPTIONS.map((days) => (
               <button
                 key={days}
                 type="button"
@@ -230,7 +234,7 @@ export function UsagePage({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {loading ? (
-            <p className="text-xs text-muted-foreground">Loading usage…</p>
+            <UsageSkeleton />
           ) : !summary ? (
             <p className="text-xs text-muted-foreground">
               Could not load usage. Try again after the next AI call.
@@ -244,80 +248,123 @@ export function UsagePage({
   );
 }
 
+function UsageSkeleton() {
+  return (
+    <div className="flex w-full flex-col gap-4" aria-busy="true" aria-label="Loading usage">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div
+            key={`hero-${i}`}
+            className="rounded-lg border border-border bg-black/20 px-4 py-4"
+          >
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-9 w-20" />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={`stat-${i}`}
+            className="rounded-lg border border-border bg-black/20 px-3 py-2.5"
+          >
+            <Skeleton className="h-3 w-14" />
+            <Skeleton className="mt-2 h-4 w-16" />
+          </div>
+        ))}
+      </div>
+
+      <Skeleton className="h-3 w-72 max-w-full" />
+
+      <div className="rounded-lg border border-border bg-black/20">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-3 w-12" />
+        </div>
+        <div className="overflow-x-auto">
+          <div className="flex min-w-[720px] flex-col">
+            <div className="grid grid-cols-8 gap-2 border-b border-border px-3 py-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={`th-${i}`} className="h-3 w-full" />
+              ))}
+            </div>
+            {Array.from({ length: PAGE_SIZE }).map((_, row) => (
+              <div
+                key={`row-${row}`}
+                className="grid grid-cols-8 gap-2 border-b border-border/60 px-3 py-2.5"
+              >
+                {Array.from({ length: 8 }).map((_, col) => (
+                  <Skeleton key={`cell-${row}-${col}`} className="h-3 w-full" />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <Skeleton className="h-3 w-20" />
+          <div className="flex gap-1.5">
+            <Skeleton className="h-7 w-12" />
+            <Skeleton className="h-7 w-12" />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={`chart-${i}`}
+            className="rounded-lg border border-border bg-black/20 p-4"
+          >
+            <Skeleton className="mb-3 h-3 w-24" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function UsageBody({ summary }: { summary: UsageSummary }) {
   const { totals } = summary;
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(summary.recent.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setPage(0);
+  }, [summary.rangeDays, summary.recent.length]);
+
+  const pageRows = useMemo(() => {
+    const start = page * PAGE_SIZE;
+    return summary.recent.slice(start, start + PAGE_SIZE);
+  }, [page, summary.recent]);
+
+  const rangeLabel = summary.rangeDays === 1 ? "today" : `${summary.rangeDays}d`;
 
   return (
     <div className="flex w-full flex-col gap-4">
-      <div className="rounded-lg border border-border bg-black/20">
-        <div className="border-b border-border px-4 py-2.5">
-          <p className="text-xs text-foreground">Recent requests</p>
-        </div>
-        {summary.recent.length === 0 ? (
-          <p className="px-4 py-6 text-[13px] text-muted-foreground">
-            No AI calls recorded yet. Run a fact-check, gaps, chat, or visualize
-            turn to populate this.
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border bg-black/20 px-4 py-4">
+          <p className="text-[11px] text-muted-foreground">
+            Calls · {rangeLabel}
           </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-[11px]">
-              <thead className="text-muted-foreground">
-                <tr className="border-b border-border">
-                  <th className="px-3 py-2 font-medium">When</th>
-                  <th className="px-3 py-2 font-medium">Task</th>
-                  <th className="px-3 py-2 font-medium">API</th>
-                  <th className="px-3 py-2 font-medium">Model</th>
-                  <th className="px-3 py-2 font-medium">In/Out</th>
-                  <th className="px-3 py-2 font-medium">Tools</th>
-                  <th className="px-3 py-2 font-medium">Latency</th>
-                  <th className="px-3 py-2 font-medium">Est. $</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.recent.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-border/60 text-foreground/80"
-                  >
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
-                      {new Date(row.createdAt).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td className="px-3 py-2">{row.task}</td>
-                    <td className="px-3 py-2">{row.api}</td>
-                    <td className="max-w-[140px] truncate px-3 py-2">
-                      {row.model}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {row.inputTokens}/{row.outputTokens}
-                    </td>
-                    <td className="px-3 py-2">{row.toolCallCount}</td>
-                    <td className="px-3 py-2">{row.latencyMs}ms</td>
-                    <td className="px-3 py-2">
-                      {row.estimatedCostUsd == null
-                        ? "—"
-                        : formatUsd(row.estimatedCostUsd)}
-                      {!row.ok ? (
-                        <span className="ml-1 text-rose-400">err</span>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          <p className="mt-1 text-3xl font-medium tracking-tight text-foreground">
+            {totals.calls}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-black/20 px-4 py-4">
+          <p className="text-[11px] text-muted-foreground">
+            Estimated cost · {rangeLabel}
+          </p>
+          <p className="mt-1 text-3xl font-medium tracking-tight text-foreground">
+            {formatUsd(totals.estimatedSpendUsd)}
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {[
-          { label: "Calls", value: String(totals.calls) },
           { label: "Errors", value: String(totals.errors) },
-          { label: "Est. spend", value: formatUsd(totals.estimatedSpendUsd) },
           { label: "$ / call", value: formatUsd(totals.avgCostPerCallUsd) },
           { label: "Tokens", value: formatTokens(totals.totalTokens) },
           {
@@ -341,6 +388,102 @@ function UsageBody({ summary }: { summary: UsageSummary }) {
         Avg tool calls / request: {totals.avgToolCallsPerRequest}. Spend uses a
         local price map — OpenAI billing is source of truth.
       </p>
+
+      <div className="rounded-lg border border-border bg-black/20">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+          <p className="text-xs text-foreground">Recent requests</p>
+          {summary.recent.length > 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              {summary.recent.length} total
+            </p>
+          ) : null}
+        </div>
+        {summary.recent.length === 0 ? (
+          <p className="px-4 py-6 text-[13px] text-muted-foreground">
+            No AI calls recorded yet. Run a fact-check, gaps, chat, or visualize
+            turn to populate this.
+          </p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-[11px]">
+                <thead className="text-muted-foreground">
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2 font-medium">When</th>
+                    <th className="px-3 py-2 font-medium">Task</th>
+                    <th className="px-3 py-2 font-medium">API</th>
+                    <th className="px-3 py-2 font-medium">Model</th>
+                    <th className="px-3 py-2 font-medium">In/Out</th>
+                    <th className="px-3 py-2 font-medium">Tools</th>
+                    <th className="px-3 py-2 font-medium">Latency</th>
+                    <th className="px-3 py-2 font-medium">Est. $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="border-b border-border/60 text-foreground/80"
+                    >
+                      <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
+                        {new Date(row.createdAt).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                      <td className="px-3 py-2">{row.task}</td>
+                      <td className="px-3 py-2">{row.api}</td>
+                      <td className="max-w-[140px] truncate px-3 py-2">
+                        {row.model}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {row.inputTokens}/{row.outputTokens}
+                      </td>
+                      <td className="px-3 py-2">{row.toolCallCount}</td>
+                      <td className="px-3 py-2">{row.latencyMs}ms</td>
+                      <td className="px-3 py-2">
+                        {row.estimatedCostUsd == null
+                          ? "—"
+                          : formatUsd(row.estimatedCostUsd)}
+                        {!row.ok ? (
+                          <span className="ml-1 text-rose-400">err</span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+              <p className="text-[11px] text-muted-foreground">
+                Page {page + 1} of {pageCount}
+              </p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  className="h-7 rounded border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                  disabled={page <= 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  className="h-7 rounded border border-border px-2.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                  disabled={page >= pageCount - 1}
+                  onClick={() =>
+                    setPage((p) => Math.min(pageCount - 1, p + 1))
+                  }
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <ChartCard label="Calls / day">

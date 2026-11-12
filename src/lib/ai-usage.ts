@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { aiUsage } from "@/db/schema";
 import type { ProviderId } from "@/lib/providers";
@@ -39,6 +39,7 @@ const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
 };
 
 const WEB_SEARCH_USD = 0.025;
+const RECENT_LIMIT = 50;
 
 export function estimateCostUsd(args: {
   model: string;
@@ -147,201 +148,212 @@ export type UsageSummary = {
   }[];
 };
 
+function asNumber(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function getUsageSummary(
   userId: string,
   rangeDays = 7,
 ): Promise<UsageSummary> {
-  const days = Math.min(90, Math.max(1, rangeDays));
+  const days = Math.min(14, Math.max(1, rangeDays));
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const whereClause = and(
+    eq(aiUsage.userId, userId),
+    gte(aiUsage.createdAt, since),
+  );
 
-  const rows = await db
-    .select()
-    .from(aiUsage)
-    .where(and(eq(aiUsage.userId, userId), gte(aiUsage.createdAt, since)))
-    .orderBy(desc(aiUsage.createdAt));
+  const [totalsRow, byDayRows, byTaskRows, byApiRows, byModelRows, recentRows] =
+    await Promise.all([
+      db
+        .select({
+          calls: sql<number>`count(*)::int`,
+          errors: sql<number>`count(*) filter (where not ${aiUsage.ok})::int`,
+          inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
+          outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+          totalTokens: sql<number>`coalesce(sum(${aiUsage.totalTokens}), 0)::int`,
+          toolCalls: sql<number>`coalesce(sum(${aiUsage.toolCallCount}), 0)::int`,
+          estimatedSpendUsd: sql<number>`coalesce(sum(${aiUsage.estimatedCostUsd}), 0)::float8`,
+          latencySum: sql<number>`coalesce(sum(${aiUsage.latencyMs}), 0)::int`,
+        })
+        .from(aiUsage)
+        .where(whereClause)
+        .then((rows) => rows[0]),
+      db
+        .select({
+          date: sql<string>`to_char((${aiUsage.createdAt} at time zone 'utc'), 'YYYY-MM-DD')`,
+          calls: sql<number>`count(*)::int`,
+          errors: sql<number>`count(*) filter (where not ${aiUsage.ok})::int`,
+          tokens: sql<number>`coalesce(sum(${aiUsage.totalTokens}), 0)::int`,
+          inputTokens: sql<number>`coalesce(sum(${aiUsage.inputTokens}), 0)::int`,
+          outputTokens: sql<number>`coalesce(sum(${aiUsage.outputTokens}), 0)::int`,
+          toolCalls: sql<number>`coalesce(sum(${aiUsage.toolCallCount}), 0)::int`,
+          spendUsd: sql<number>`coalesce(sum(${aiUsage.estimatedCostUsd}), 0)::float8`,
+          latencySum: sql<number>`coalesce(sum(${aiUsage.latencyMs}), 0)::int`,
+        })
+        .from(aiUsage)
+        .where(whereClause)
+        .groupBy(
+          sql`to_char((${aiUsage.createdAt} at time zone 'utc'), 'YYYY-MM-DD')`,
+        ),
+      db
+        .select({
+          task: aiUsage.task,
+          calls: sql<number>`count(*)::int`,
+          tokens: sql<number>`coalesce(sum(${aiUsage.totalTokens}), 0)::int`,
+          spendUsd: sql<number>`coalesce(sum(${aiUsage.estimatedCostUsd}), 0)::float8`,
+          toolCalls: sql<number>`coalesce(sum(${aiUsage.toolCallCount}), 0)::int`,
+          latencySum: sql<number>`coalesce(sum(${aiUsage.latencyMs}), 0)::int`,
+        })
+        .from(aiUsage)
+        .where(whereClause)
+        .groupBy(aiUsage.task),
+      db
+        .select({
+          api: aiUsage.api,
+          calls: sql<number>`count(*)::int`,
+          tokens: sql<number>`coalesce(sum(${aiUsage.totalTokens}), 0)::int`,
+          spendUsd: sql<number>`coalesce(sum(${aiUsage.estimatedCostUsd}), 0)::float8`,
+        })
+        .from(aiUsage)
+        .where(whereClause)
+        .groupBy(aiUsage.api),
+      db
+        .select({
+          model: aiUsage.model,
+          calls: sql<number>`count(*)::int`,
+          tokens: sql<number>`coalesce(sum(${aiUsage.totalTokens}), 0)::int`,
+          spendUsd: sql<number>`coalesce(sum(${aiUsage.estimatedCostUsd}), 0)::float8`,
+          toolCalls: sql<number>`coalesce(sum(${aiUsage.toolCallCount}), 0)::int`,
+          latencySum: sql<number>`coalesce(sum(${aiUsage.latencyMs}), 0)::int`,
+        })
+        .from(aiUsage)
+        .where(whereClause)
+        .groupBy(aiUsage.model),
+      db
+        .select({
+          id: aiUsage.id,
+          createdAt: aiUsage.createdAt,
+          model: aiUsage.model,
+          api: aiUsage.api,
+          task: aiUsage.task,
+          inputTokens: aiUsage.inputTokens,
+          outputTokens: aiUsage.outputTokens,
+          toolCallCount: aiUsage.toolCallCount,
+          latencyMs: aiUsage.latencyMs,
+          estimatedCostUsd: aiUsage.estimatedCostUsd,
+          ok: aiUsage.ok,
+        })
+        .from(aiUsage)
+        .where(whereClause)
+        .orderBy(desc(aiUsage.createdAt))
+        .limit(RECENT_LIMIT),
+    ]);
 
+  const calls = asNumber(totalsRow?.calls);
+  const estimatedSpendUsd =
+    Math.round(asNumber(totalsRow?.estimatedSpendUsd) * 1_000_000) / 1_000_000;
   const totals = {
-    calls: 0,
-    errors: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    toolCalls: 0,
-    estimatedSpendUsd: 0,
-    avgLatencyMs: 0,
-    avgToolCallsPerRequest: 0,
-    avgCostPerCallUsd: 0,
+    calls,
+    errors: asNumber(totalsRow?.errors),
+    inputTokens: asNumber(totalsRow?.inputTokens),
+    outputTokens: asNumber(totalsRow?.outputTokens),
+    totalTokens: asNumber(totalsRow?.totalTokens),
+    toolCalls: asNumber(totalsRow?.toolCalls),
+    estimatedSpendUsd,
+    avgLatencyMs:
+      calls > 0 ? Math.round(asNumber(totalsRow?.latencySum) / calls) : 0,
+    avgToolCallsPerRequest:
+      calls > 0
+        ? Math.round((asNumber(totalsRow?.toolCalls) / calls) * 100) / 100
+        : 0,
+    avgCostPerCallUsd:
+      calls > 0
+        ? Math.round((estimatedSpendUsd / calls) * 1_000_000) / 1_000_000
+        : 0,
   };
-  let latencySum = 0;
-  type DayAgg = {
-    calls: number;
-    errors: number;
-    tokens: number;
-    inputTokens: number;
-    outputTokens: number;
-    toolCalls: number;
-    spendUsd: number;
-    latencySum: number;
-  };
-  type BucketAgg = {
-    calls: number;
-    tokens: number;
-    spendUsd: number;
-    toolCalls: number;
-    latencySum: number;
-  };
-  const dayMap = new Map<string, DayAgg>();
-  const taskMap = new Map<string, BucketAgg>();
-  const apiMap = new Map<string, BucketAgg>();
-  const modelMap = new Map<string, BucketAgg>();
 
-  for (const row of rows) {
-    const spend = row.estimatedCostUsd ?? 0;
-    totals.calls += 1;
-    if (!row.ok) totals.errors += 1;
-    totals.inputTokens += row.inputTokens;
-    totals.outputTokens += row.outputTokens;
-    totals.totalTokens += row.totalTokens;
-    totals.toolCalls += row.toolCallCount;
-    totals.estimatedSpendUsd += spend;
-    latencySum += row.latencyMs;
-
-    const date = row.createdAt.toISOString().slice(0, 10);
-    const day = dayMap.get(date) ?? {
-      calls: 0,
-      errors: 0,
-      tokens: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      toolCalls: 0,
-      spendUsd: 0,
-      latencySum: 0,
-    };
-    day.calls += 1;
-    if (!row.ok) day.errors += 1;
-    day.tokens += row.totalTokens;
-    day.inputTokens += row.inputTokens;
-    day.outputTokens += row.outputTokens;
-    day.toolCalls += row.toolCallCount;
-    day.spendUsd += spend;
-    day.latencySum += row.latencyMs;
-    dayMap.set(date, day);
-
-    const bump = (map: Map<string, BucketAgg>, key: string) => {
-      const bucket = map.get(key) ?? {
-        calls: 0,
-        tokens: 0,
-        spendUsd: 0,
-        toolCalls: 0,
-        latencySum: 0,
-      };
-      bucket.calls += 1;
-      bucket.tokens += row.totalTokens;
-      bucket.spendUsd += spend;
-      bucket.toolCalls += row.toolCallCount;
-      bucket.latencySum += row.latencyMs;
-      map.set(key, bucket);
-    };
-    bump(taskMap, row.task);
-    bump(apiMap, row.api);
-    bump(modelMap, row.model);
-  }
-
-  totals.avgLatencyMs =
-    totals.calls > 0 ? Math.round(latencySum / totals.calls) : 0;
-  totals.avgToolCallsPerRequest =
-    totals.calls > 0
-      ? Math.round((totals.toolCalls / totals.calls) * 100) / 100
-      : 0;
-  totals.estimatedSpendUsd =
-    Math.round(totals.estimatedSpendUsd * 1_000_000) / 1_000_000;
-  totals.avgCostPerCallUsd =
-    totals.calls > 0
-      ? Math.round((totals.estimatedSpendUsd / totals.calls) * 1_000_000) /
-        1_000_000
-      : 0;
-
-  const emptyDay = (): DayAgg => ({
-    calls: 0,
-    errors: 0,
-    tokens: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    toolCalls: 0,
-    spendUsd: 0,
-    latencySum: 0,
-  });
+  const dayMap = new Map(
+    byDayRows.map((row) => [
+      row.date,
+      {
+        calls: asNumber(row.calls),
+        errors: asNumber(row.errors),
+        tokens: asNumber(row.tokens),
+        inputTokens: asNumber(row.inputTokens),
+        outputTokens: asNumber(row.outputTokens),
+        toolCalls: asNumber(row.toolCalls),
+        spendUsd: asNumber(row.spendUsd),
+        latencySum: asNumber(row.latencySum),
+      },
+    ]),
+  );
 
   const byDay: UsageSummary["byDay"] = [];
   for (let i = days - 1; i >= 0; i -= 1) {
     const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
     const key = d.toISOString().slice(0, 10);
-    const hit = dayMap.get(key) ?? emptyDay();
+    const hit = dayMap.get(key);
     byDay.push({
       date: key,
-      calls: hit.calls,
-      errors: hit.errors,
-      tokens: hit.tokens,
-      inputTokens: hit.inputTokens,
-      outputTokens: hit.outputTokens,
-      toolCalls: hit.toolCalls,
-      spendUsd: Math.round(hit.spendUsd * 1_000_000) / 1_000_000,
+      calls: hit?.calls ?? 0,
+      errors: hit?.errors ?? 0,
+      tokens: hit?.tokens ?? 0,
+      inputTokens: hit?.inputTokens ?? 0,
+      outputTokens: hit?.outputTokens ?? 0,
+      toolCalls: hit?.toolCalls ?? 0,
+      spendUsd: Math.round((hit?.spendUsd ?? 0) * 1_000_000) / 1_000_000,
       avgLatencyMs:
-        hit.calls > 0 ? Math.round(hit.latencySum / hit.calls) : 0,
+        hit && hit.calls > 0 ? Math.round(hit.latencySum / hit.calls) : 0,
     });
   }
-
-  const fromBucket = ([key, v]: [string, BucketAgg]) => ({
-    calls: v.calls,
-    tokens: v.tokens,
-    spendUsd: Math.round(v.spendUsd * 1_000_000) / 1_000_000,
-    toolCalls: v.toolCalls,
-    avgLatencyMs: v.calls > 0 ? Math.round(v.latencySum / v.calls) : 0,
-    key,
-  });
 
   return {
     rangeDays: days,
     totals,
     byDay,
-    byTask: [...taskMap.entries()]
-      .map((entry) => {
-        const row = fromBucket(entry);
+    byTask: byTaskRows
+      .map((row) => {
+        const rowCalls = asNumber(row.calls);
         return {
-          task: row.key,
-          calls: row.calls,
-          tokens: row.tokens,
-          spendUsd: row.spendUsd,
-          toolCalls: row.toolCalls,
-          avgLatencyMs: row.avgLatencyMs,
+          task: row.task,
+          calls: rowCalls,
+          tokens: asNumber(row.tokens),
+          spendUsd: Math.round(asNumber(row.spendUsd) * 1_000_000) / 1_000_000,
+          toolCalls: asNumber(row.toolCalls),
+          avgLatencyMs:
+            rowCalls > 0
+              ? Math.round(asNumber(row.latencySum) / rowCalls)
+              : 0,
         };
       })
       .sort((a, b) => b.calls - a.calls),
-    byApi: [...apiMap.entries()]
-      .map((entry) => {
-        const row = fromBucket(entry);
+    byApi: byApiRows
+      .map((row) => ({
+        api: row.api,
+        calls: asNumber(row.calls),
+        tokens: asNumber(row.tokens),
+        spendUsd: Math.round(asNumber(row.spendUsd) * 1_000_000) / 1_000_000,
+      }))
+      .sort((a, b) => b.calls - a.calls),
+    byModel: byModelRows
+      .map((row) => {
+        const rowCalls = asNumber(row.calls);
         return {
-          api: row.key,
-          calls: row.calls,
-          tokens: row.tokens,
-          spendUsd: row.spendUsd,
+          model: row.model,
+          calls: rowCalls,
+          tokens: asNumber(row.tokens),
+          spendUsd: Math.round(asNumber(row.spendUsd) * 1_000_000) / 1_000_000,
+          toolCalls: asNumber(row.toolCalls),
+          avgLatencyMs:
+            rowCalls > 0
+              ? Math.round(asNumber(row.latencySum) / rowCalls)
+              : 0,
         };
       })
       .sort((a, b) => b.calls - a.calls),
-    byModel: [...modelMap.entries()]
-      .map((entry) => {
-        const row = fromBucket(entry);
-        return {
-          model: row.key,
-          calls: row.calls,
-          tokens: row.tokens,
-          spendUsd: row.spendUsd,
-          toolCalls: row.toolCalls,
-          avgLatencyMs: row.avgLatencyMs,
-        };
-      })
-      .sort((a, b) => b.calls - a.calls),
-    recent: rows.slice(0, 40).map((row) => ({
+    recent: recentRows.map((row) => ({
       id: row.id,
       createdAt: row.createdAt.toISOString(),
       model: row.model,

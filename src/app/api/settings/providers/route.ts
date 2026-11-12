@@ -6,6 +6,8 @@ import {
   upsertProviderCredential,
 } from "@/lib/provider-credentials";
 import {
+  canonicalProviderBaseUrl,
+  isAllowedProviderBaseUrl,
   isEnabledProviderId,
   isProviderId,
   PROVIDER_DEFAULTS,
@@ -24,7 +26,8 @@ export async function GET() {
 const putSchema = z.object({
   provider: z.string().refine(isProviderId),
   model: z.string().trim().min(1).max(200),
-  baseUrl: z.string().trim().url().max(500),
+  // Optional: if sent, must be the official allowlisted URL (custom hosts rejected).
+  baseUrl: z.string().trim().url().max(500).optional(),
   apiKey: z.string().trim().min(1).max(500).optional(),
   makeActive: z.boolean().optional(),
 });
@@ -75,12 +78,22 @@ export async function PUT(request: Request) {
       { status: 400 },
     );
   }
+  if (
+    parsed.data.baseUrl &&
+    !isAllowedProviderBaseUrl(provider, parsed.data.baseUrl)
+  ) {
+    return Response.json(
+      { error: "Provider base URL is not allowed" },
+      { status: 400 },
+    );
+  }
   try {
     await upsertProviderCredential({
       userId,
       provider,
       model: parsed.data.model || PROVIDER_DEFAULTS[provider].model,
-      baseUrl: parsed.data.baseUrl || PROVIDER_DEFAULTS[provider].baseUrl,
+      // Always persist the server constant — never a client-supplied host.
+      baseUrl: canonicalProviderBaseUrl(provider),
       apiKey: parsed.data.apiKey,
       makeActive: parsed.data.makeActive,
     });

@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { providerCredentials } from "@/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/credentials-crypto";
 import {
+  canonicalProviderBaseUrl,
   ENABLED_PROVIDER_IDS,
   isEnabledProviderId,
   PROVIDER_DEFAULTS,
@@ -76,16 +77,15 @@ export async function getProviderSettingsView(
       gpt: {
         enabled: true,
         model: byProvider.gpt?.model ?? PROVIDER_DEFAULTS.gpt.model,
-        baseUrl: byProvider.gpt?.baseUrl ?? PROVIDER_DEFAULTS.gpt.baseUrl,
+        // Never surface a stored custom baseUrl (SSRF).
+        baseUrl: PROVIDER_DEFAULTS.gpt.baseUrl,
         apiKeyConfigured: Boolean(byProvider.gpt),
       },
       openrouter: {
         enabled: false,
         model:
           byProvider.openrouter?.model ?? PROVIDER_DEFAULTS.openrouter.model,
-        baseUrl:
-          byProvider.openrouter?.baseUrl ??
-          PROVIDER_DEFAULTS.openrouter.baseUrl,
+        baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl,
         apiKeyConfigured: Boolean(byProvider.openrouter),
       },
     },
@@ -135,12 +135,15 @@ export async function upsertProviderCredential(input: {
       .where(eq(providerCredentials.userId, input.userId));
   }
 
+  // Ignore client/custom baseUrl — always persist the official endpoint.
+  const baseUrl = canonicalProviderBaseUrl(input.provider);
+
   if (current) {
     await db
       .update(providerCredentials)
       .set({
         model: input.model,
-        baseUrl: input.baseUrl,
+        baseUrl,
         apiKeyCiphertext: ciphertext,
         ...(input.makeActive ? { isActive: true as const } : {}),
         updatedAt: new Date(),
@@ -159,7 +162,7 @@ export async function upsertProviderCredential(input: {
     userId: input.userId,
     provider: input.provider,
     model: input.model,
-    baseUrl: input.baseUrl,
+    baseUrl,
     apiKeyCiphertext: ciphertext,
     // First configured provider becomes active automatically.
     isActive: Boolean(input.makeActive) || existingAny.length === 0,
@@ -222,7 +225,8 @@ export async function resolveActiveProviderCredentials(
     provider: "gpt",
     apiKey: decryptProviderApiKey(row.apiKeyCiphertext, "gpt"),
     model: row.model,
-    baseUrl: row.baseUrl.replace(/\/$/, ""),
+    // Never use a stored custom baseUrl (SSRF / API key exfil).
+    baseUrl: canonicalProviderBaseUrl("gpt"),
   };
 }
 
@@ -352,7 +356,11 @@ export async function getProviderConnectionStatuses(
         ] as const;
       }
 
-      const probe = await probeProviderKey(provider, apiKey, row.baseUrl);
+      const probe = await probeProviderKey(
+        provider,
+        apiKey,
+        canonicalProviderBaseUrl(provider),
+      );
 
       if (!probe.ok) {
         return [

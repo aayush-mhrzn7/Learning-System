@@ -12,6 +12,10 @@ const signupSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (process.env.ALLOW_SIGNUP === "false") {
+    return Response.json({ error: "Signup is disabled" }, { status: 403 });
+  }
+
   const payload = signupSchema.safeParse(await request.json().catch(() => null));
   if (!payload.success) {
     return Response.json({ error: "Invalid email or password" }, { status: 400 });

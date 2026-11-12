@@ -1,6 +1,6 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, not } from "drizzle-orm";
 import { db } from "@/db";
-import { claims, notes } from "@/db/schema";
+import { claims, notes, type ClaimSource } from "@/db/schema";
 import {
   decideClaims,
   extractClaims,
@@ -68,7 +68,6 @@ export async function POST(_request: Request, context: Context) {
         send({ type: "extracting" });
         const noteText = documentToText(note.content, { skipCode: true });
         const extracted = await extractClaims(credentials, noteText);
-        await db.delete(claims).where(eq(claims.noteId, id));
         for (const [index, claim] of extracted.entries()) {
           send({
             type: "extracted",
@@ -101,6 +100,16 @@ export async function POST(_request: Request, context: Context) {
           skipped: decided.length - toCheck.length,
         });
 
+        type ReadyClaim = {
+          id: string;
+          noteId: string;
+          claimText: string;
+          verdict: "correct" | "incorrect" | "unsure";
+          reason: string;
+          sources: ClaimSource[];
+          stale: boolean;
+        };
+        const ready: ReadyClaim[] = [];
         let failed = 0;
         await mapPool(toCheck, JUDGE_CONCURRENCY, async ({ text, score }) => {
           send({ type: "checking", text, score });
@@ -110,16 +119,16 @@ export async function POST(_request: Request, context: Context) {
               text,
               localClaimContext(noteText, text),
             );
-            const [claim] = await db
-              .insert(claims)
-              .values({
-                noteId: id,
-                claimText: text,
-                verdict: verdict.verdict,
-                reason: verdict.reason,
-                sources: verdict.sources,
-              })
-              .returning();
+            const claim: ReadyClaim = {
+              id: crypto.randomUUID(),
+              noteId: id,
+              claimText: text,
+              verdict: verdict.verdict,
+              reason: verdict.reason,
+              sources: verdict.sources,
+              stale: false,
+            };
+            ready.push(claim);
             send({ type: "claim", claim, score });
           } catch (error) {
             failed += 1;
@@ -131,6 +140,21 @@ export async function POST(_request: Request, context: Context) {
             });
           }
         });
+
+        // Swap only after judges finish — keep prior claims if the run aborts early.
+        // neon-http has no multi-statement txn; insert-then-delete-old is the safe order.
+        // shortcut: rare crash between insert and delete can leave old+new until next run
+        if (ready.length > 0) {
+          const newIds = ready.map((claim) => claim.id);
+          await db.insert(claims).values(ready);
+          await db
+            .delete(claims)
+            .where(
+              and(eq(claims.noteId, id), not(inArray(claims.id, newIds))),
+            );
+        } else {
+          await db.delete(claims).where(eq(claims.noteId, id));
+        }
 
         await db
           .update(notes)

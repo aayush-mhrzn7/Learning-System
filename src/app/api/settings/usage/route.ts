@@ -6,8 +6,8 @@ export async function GET(request: Request) {
   if (error || !userId) return error!;
 
   const url = new URL(request.url);
-  const range = Number(url.searchParams.get("range") ?? "7");
-  const summary = await getUsageSummary(userId, Number.isFinite(range) ? range : 7);
+  const range = Number(url.searchParams.get("range") ?? "1");
+  const summary = await getUsageSummary(userId, Number.isFinite(range) ? range : 1);
 
   return Response.json(summary, {
     headers: { "Cache-Control": "no-store" },

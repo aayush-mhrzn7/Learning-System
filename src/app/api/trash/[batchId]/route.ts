@@ -38,7 +38,13 @@ export async function POST(_request: Request, context: Context) {
     ),
     restored_directories AS (
       UPDATE directories
-      SET deleted_at = NULL, delete_batch_id = NULL
+      SET
+        deleted_at = NULL,
+        -- Only detach this batch; keep other batches' ids so trash stays consistent.
+        delete_batch_id = CASE
+          WHEN delete_batch_id = ${batchId}::uuid THEN NULL
+          ELSE delete_batch_id
+        END
       WHERE id IN (SELECT id FROM ancestors)
         AND user_id = ${userId}::uuid
       RETURNING id
@@ -66,11 +72,13 @@ export async function DELETE(_request: Request, context: Context) {
       DELETE FROM notes
       WHERE delete_batch_id = ${batchId}::uuid
         AND user_id = ${userId}::uuid
+        AND deleted_at IS NOT NULL
       RETURNING id
     )
     DELETE FROM directories
     WHERE delete_batch_id = ${batchId}::uuid
       AND user_id = ${userId}::uuid
+      AND deleted_at IS NOT NULL
   `);
 
   return Response.json({ ok: true });

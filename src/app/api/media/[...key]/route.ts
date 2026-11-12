@@ -26,12 +26,21 @@ export async function GET(
       return Response.json({ error: "Not found" }, { status: 404 });
     }
     const bytes = await object.Body.transformToByteArray();
-    return new Response(Buffer.from(bytes), {
-      headers: {
-        "Content-Type": object.ContentType || "application/octet-stream",
-        "Cache-Control": "private, max-age=31536000, immutable",
-      },
-    });
+    const contentType = object.ContentType || "application/octet-stream";
+    const isSvg =
+      contentType.toLowerCase().includes("svg") ||
+      key.toLowerCase().endsWith(".svg");
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Cache-Control": "private, max-age=31536000, immutable",
+    };
+    if (isSvg) {
+      // Defense in depth if an SVG was uploaded before the ban.
+      headers["Content-Disposition"] = "attachment";
+      headers["Content-Security-Policy"] =
+        "default-src 'none'; style-src 'none'; sandbox";
+    }
+    return new Response(Buffer.from(bytes), { headers });
   } catch {
     return Response.json({ error: "Not found" }, { status: 404 });
   }

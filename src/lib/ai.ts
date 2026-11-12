@@ -302,7 +302,7 @@ async function structuredResponse<T>(
     });
 
     const toolCallCount = countToolCalls(response);
-    await recordAiUsage({
+    void recordAiUsage({
       userId: credentials.userId,
       provider: credentials.provider,
       model: credentials.model,
@@ -377,7 +377,7 @@ async function structuredResponse<T>(
     }
   } catch (error) {
     if (!response) {
-      await recordAiUsage({
+      void recordAiUsage({
         userId: credentials.userId,
         provider: credentials.provider,
         model: credentials.model,
@@ -587,7 +587,7 @@ export async function decideClaims(
         })),
       });
 
-      await recordAiUsage({
+      void recordAiUsage({
         userId: credentials.userId,
         provider: credentials.provider,
         model: decision.model || DECISIONS_MODEL,
@@ -609,7 +609,7 @@ export async function decideClaims(
         scores[index] = answer.probability;
       }
     } catch (error) {
-      await recordAiUsage({
+      void recordAiUsage({
         userId: credentials.userId,
         provider: credentials.provider,
         model: DECISIONS_MODEL,
@@ -986,7 +986,7 @@ export async function* streamVisualizeTurn(
       };
     }
 
-    await recordAiUsage({
+    void recordAiUsage({
       userId: credentials.userId,
       provider: credentials.provider,
       model: credentials.model,
@@ -1010,7 +1010,7 @@ export async function* streamVisualizeTurn(
       turn: finalizeVisualizeTurn(parseJsonObject(raw)),
     };
   } catch (error) {
-    await recordAiUsage({
+    void recordAiUsage({
       userId: credentials.userId,
       provider: credentials.provider,
       model: credentials.model,
