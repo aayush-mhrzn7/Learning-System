@@ -234,7 +234,7 @@ export function NoteEditor({
           directions: ["left", "right", "bottom-left", "bottom-right"],
           minWidth: 80,
           minHeight: 40,
-          alwaysPreserveAspectRatio: false,
+          alwaysPreserveAspectRatio: true,
         },
         HTMLAttributes: {
           class: "learning-editor-image",
