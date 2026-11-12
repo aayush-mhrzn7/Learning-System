@@ -225,7 +225,7 @@ button:disabled {
   outline: none;
   color: #e7e7e7;
   font-size: 1.0625rem;
-  line-height: 1.7;
+  line-height: 1.55;
 }
 
 .learning-editor[data-font-size="sm"] {
@@ -246,12 +246,12 @@ button:disabled {
 
 @media (min-width: 640px) {
   .learning-editor {
-    line-height: 1.8;
+    line-height: 1.6;
   }
 }
 
 .learning-editor > * + * {
-  margin-top: 1rem;
+  margin-top: 0.4em;
 }
 
 .learning-editor p.is-editor-empty:first-child::before {
@@ -264,9 +264,12 @@ button:disabled {
 
 .learning-editor h1,
 .learning-editor h2,
-.learning-editor h3 {
-  margin-top: 1.6em;
-  margin-bottom: 0.5em;
+.learning-editor h3,
+.learning-editor h4,
+.learning-editor h5,
+.learning-editor h6 {
+  margin-top: 1.25em;
+  margin-bottom: 0.35em;
   color: #fff;
   font-weight: 600;
   line-height: 1.25;
@@ -287,6 +290,66 @@ button:disabled {
 
 .learning-editor h3 {
   font-size: 1.3rem;
+}
+
+.learning-editor h4 {
+  font-size: 1.15rem;
+}
+
+.learning-editor h5 {
+  font-size: 1.05rem;
+}
+
+.learning-editor h6 {
+  font-size: 1rem;
+  color: #ddd;
+}
+
+.learning-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 0.75rem 0;
+  overflow: hidden;
+}
+
+.learning-editor td,
+.learning-editor th {
+  position: relative;
+  min-width: 1em;
+  border: 1px solid #333;
+  padding: 0.4rem 0.55rem;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+.learning-editor th {
+  background: #141414;
+  font-weight: 600;
+  text-align: left;
+}
+
+.learning-editor .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(255 255 255 / 6%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.learning-editor .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  background: #666;
+  pointer-events: none;
+}
+
+.learning-editor.resize-cursor {
+  cursor: col-resize;
 }
 
 .learning-editor ul,

@@ -6,12 +6,17 @@ import {
   Code2,
   Heading1,
   Heading2,
+  Heading3,
+  Heading4,
+  Heading5,
+  Heading6,
   Italic,
   Link as LinkIcon,
   List,
   ListOrdered,
   Quote,
   Strikethrough,
+  Table,
   Unlink,
 } from "lucide-react";
 import { FormEvent, useState } from "react";
@@ -94,6 +99,30 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
       run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
     },
     {
+      label: "Heading 3",
+      icon: Heading3,
+      active: editor.isActive("heading", { level: 3 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+    },
+    {
+      label: "Heading 4",
+      icon: Heading4,
+      active: editor.isActive("heading", { level: 4 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 4 }).run(),
+    },
+    {
+      label: "Heading 5",
+      icon: Heading5,
+      active: editor.isActive("heading", { level: 5 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 5 }).run(),
+    },
+    {
+      label: "Heading 6",
+      icon: Heading6,
+      active: editor.isActive("heading", { level: 6 }),
+      run: () => editor.chain().focus().toggleHeading({ level: 6 }).run(),
+    },
+    {
       label: "Bullet list",
       icon: List,
       active: editor.isActive("bulletList"),
@@ -110,6 +139,17 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
       icon: Quote,
       active: editor.isActive("blockquote"),
       run: () => editor.chain().focus().toggleBlockquote().run(),
+    },
+    {
+      label: "Insert table",
+      icon: Table,
+      active: editor.isActive("table"),
+      run: () =>
+        editor
+          .chain()
+          .focus()
+          .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+          .run(),
     },
   ];
 
