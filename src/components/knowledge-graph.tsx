@@ -49,8 +49,35 @@ function nodeRadius(node: SimNode) {
 function nodeFill(node: SimNode) {
   if (node.type === "root") return "#e8e8e8";
   if (node.type === "directory") return "#7dcea0";
-  if (node.kind === "visualize") return "#9aa3c7";
+  if (node.kind === "visualize") return "#6ea8ff";
   return "#c8c8c8";
+}
+
+function appendNodeShape(
+  selection: d3.Selection<SVGGElement, SimNode, SVGGElement, unknown>,
+) {
+  // Writing notes stay round; visualize notes are diamonds so kinds read at a glance.
+  selection.each(function (d) {
+    const g = d3.select(this);
+    const r = nodeRadius(d);
+    if (d.type === "note" && d.kind === "visualize") {
+      g.append("rect")
+        .attr("x", -r)
+        .attr("y", -r)
+        .attr("width", r * 2)
+        .attr("height", r * 2)
+        .attr("rx", 1.2)
+        .attr("transform", "rotate(45)")
+        .attr("fill", nodeFill(d))
+        .attr("stroke", "#b7d4ff")
+        .attr("stroke-width", 1);
+      return;
+    }
+    g.append("circle")
+      .attr("r", r)
+      .attr("fill", nodeFill(d))
+      .attr("stroke", "none");
+  });
 }
 
 function Switch({
@@ -300,18 +327,18 @@ export function KnowledgeGraph({
         if (d.type === "note") onOpenNoteRef.current(d.id);
       });
 
-    node
-      .append("circle")
-      .attr("r", (d) => nodeRadius(d))
-      .attr("fill", (d) => nodeFill(d))
-      .attr("stroke", "none");
+    appendNodeShape(node);
 
     const label = node
       .append("text")
       .attr("text-anchor", "middle")
       .attr("dy", (d) => nodeRadius(d) + 12)
       .attr("fill", (d) =>
-        d.type === "directory" || d.type === "root" ? "#ddd" : "#aaa",
+        d.type === "directory" || d.type === "root"
+          ? "#ddd"
+          : d.kind === "visualize"
+            ? "#9ec1ff"
+            : "#aaa",
       )
       .attr("font-size", 11)
       .attr("paint-order", "stroke")
@@ -385,6 +412,11 @@ export function KnowledgeGraph({
           <h1 className="text-sm font-medium text-[#eee]">Knowledge graph</h1>
           <p className="text-xs text-[#777]">
             Drag nodes · scroll to zoom · click a note to open
+            <span className="text-[#666]">
+              {" "}
+              · <span className="text-[#c8c8c8]">●</span> note ·{" "}
+              <span className="text-[#6ea8ff]">◆</span> visualize
+            </span>
             {hoveredTitle ? (
               <span className="text-[#bbb]"> · {hoveredTitle}</span>
             ) : null}
