@@ -31,7 +31,7 @@ const MIN_NODE_W = 72;
 
 function estimateWidth(label: string) {
   // ~6.6px per char at 11px — good enough without measuring first.
-  return Math.max(MIN_NODE_W, Math.min(220, label.length * 6.6 + 28));
+  return Math.max(MIN_NODE_W, Math.min(280, label.length * 6.6 + 28));
 }
 
 /** Longest-path ranks from sources → sinks (top to bottom). */

@@ -700,6 +700,11 @@ const inlineReplySchema = z.object({
   answer: z.string().min(1).max(4000),
 });
 
+const VISUALIZE_NODE_LABEL_MAX = 80;
+const VISUALIZE_EDGE_LABEL_MAX = 48;
+const VISUALIZE_NODE_MAX = 16;
+const VISUALIZE_EDGE_MAX = 24;
+
 const visualizeTurnSchema = z.object({
   accepted: z.boolean(),
   title: z.string().max(80).nullable(),
@@ -714,19 +719,20 @@ const visualizeTurnSchema = z.object({
         .array(
           z.object({
             id: z.string().min(1).max(40),
-            label: z.string().min(1).max(48),
+            // Soft-cap in finalize — keep Zod permissive so long model labels don't fail the turn.
+            label: z.string().min(1).max(200),
           }),
         )
-        .max(8),
+        .max(VISUALIZE_NODE_MAX),
       edges: z
         .array(
           z.object({
             source: z.string().min(1).max(40),
             target: z.string().min(1).max(40),
-            label: z.string().max(40),
+            label: z.string().max(120),
           }),
         )
-        .max(12)
+        .max(VISUALIZE_EDGE_MAX)
         .transform((edges) =>
           edges.map((edge) => {
             const label = edge.label.trim();
@@ -758,7 +764,7 @@ const visualizeSchemaPayload = {
           properties: {
             nodes: {
               type: "array",
-              maxItems: 8,
+              maxItems: VISUALIZE_NODE_MAX,
               items: {
                 type: "object",
                 properties: {
@@ -771,7 +777,7 @@ const visualizeSchemaPayload = {
             },
             edges: {
               type: "array",
-              maxItems: 12,
+              maxItems: VISUALIZE_EDGE_MAX,
               items: {
                 type: "object",
                 properties: {
@@ -808,7 +814,9 @@ const visualizeInstructions = [
   "You only visualize software systems, architecture, algorithms, data flows, and similar diagrams.",
   "Reject general chat, homework essays, coding help, writing, opinions, or anything that is not a visualize request.",
   "When rejected: accepted=false, diagram=null, explanation=\"\", sampleInput=\"\", sampleOutput=\"\", formula=\"\", reply briefly clarifies this tool is only for visualizing software/architecture/algorithms and asks them to rephrase.",
-  "When accepted: accepted=true, return a MINIMAL diagram (prefer ≤6 nodes).",
+  "When accepted: accepted=true, return a DETAILED diagram that covers the important stages, branches, and components of the topic (typically 8–16 nodes when the system is complex; fewer for tiny topics).",
+  "Prefer concrete component names over vague buckets; include key decision points, queues, stores, and outputs when they matter.",
+  `Node labels: short readable phrases (≤${VISUALIZE_NODE_LABEL_MAX} chars). Edge labels: brief verbs/conditions (≤${VISUALIZE_EDGE_LABEL_MAX} chars) or \"\".`,
   "explanation: 3–6 sentences teaching what the diagram shows, why the stages matter, and how data moves — not a one-liner.",
   "sampleInput: a concrete tiny example entering the pipeline (quote or short JSON/text).",
   "sampleOutput: what comes out after the flow for that same example.",
@@ -870,14 +878,25 @@ function finalizeVisualizeTurn(data: unknown): VisualizeTurnResult {
         "I can only draw software, architecture, and algorithm diagrams. Ask me to visualize something like that.",
     };
   }
-  const ids = new Set(parsed.diagram.nodes.map((node) => node.id));
+  const clip = (value: string, max: number) =>
+    value.length <= max ? value : `${value.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+  const nodes = parsed.diagram.nodes.slice(0, VISUALIZE_NODE_MAX).map((node) => ({
+    ...node,
+    label: clip(node.label.trim(), VISUALIZE_NODE_LABEL_MAX) || node.id,
+  }));
+  const ids = new Set(nodes.map((node) => node.id));
   return {
     ...parsed,
     diagram: {
-      nodes: parsed.diagram.nodes.slice(0, 8),
+      nodes,
       edges: parsed.diagram.edges
         .filter((edge) => ids.has(edge.source) && ids.has(edge.target))
-        .slice(0, 12),
+        .slice(0, VISUALIZE_EDGE_MAX)
+        .map((edge) =>
+          edge.label
+            ? { ...edge, label: clip(edge.label, VISUALIZE_EDGE_LABEL_MAX) }
+            : edge,
+        ),
     },
   };
 }

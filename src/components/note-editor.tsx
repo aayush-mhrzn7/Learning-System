@@ -15,6 +15,7 @@ import {
   PanelRightOpen,
   Pencil,
   ScanSearch,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -462,6 +463,7 @@ export function NoteEditor({
       let failedClaims = 0;
       let extractedCount = 0;
       let sawDone = false;
+      let factCheckIncomplete = false;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -594,30 +596,30 @@ export function NoteEditor({
 
           if (event.type === "done") {
             sawDone = true;
-            const incomplete = Boolean(event.incomplete);
+            factCheckIncomplete = Boolean(event.incomplete);
             setPayload((current) =>
               current
                 ? {
                     ...current,
                     note: {
                       ...current.note,
-                      factCheckIncomplete: incomplete,
+                      factCheckIncomplete,
                     },
                   }
                 : current,
             );
             if (total > 0) {
               updateStep(gen, "web", {
-                status: incomplete ? "failed" : "success",
-                detail: incomplete
+                status: factCheckIncomplete ? "failed" : "success",
+                detail: factCheckIncomplete
                   ? `${failedClaims} claim${failedClaims === 1 ? "" : "s"} failed`
                   : `${total} checked`,
-                log: incomplete
+                log: factCheckIncomplete
                   ? `✗ web check incomplete (${failedClaims} failed)`
                   : `✓ web check complete (${total})`,
               });
             }
-            if (incomplete) {
+            if (factCheckIncomplete) {
               updateStep(gen, "complete", {
                 status: "failed",
                 detail: "Fact-check incomplete",
@@ -628,7 +630,7 @@ export function NoteEditor({
                   current ? { ...current, status: "failed" } : current,
                 );
               }
-            } else {
+            } else if (kind === "fact-check") {
               updateStep(gen, "complete", {
                 status: "success",
                 log:
@@ -652,6 +654,59 @@ export function NoteEditor({
 
       if (!sawDone) {
         throw new Error("Fact-check ended early");
+      }
+
+      // Publish/re-publish with fact-check also analyzes what's missing.
+      // Publish as-is (skipFactCheck) never reaches here.
+      if (kind !== "fact-check" && !factCheckIncomplete) {
+        updateStep(gen, "gaps", {
+          status: "running",
+          log: "+ analyzing gaps",
+        });
+        setGapsLoading(true);
+        try {
+          const gapsResponse = await fetch(`/api/notes/${noteId}/gaps`, {
+            method: "POST",
+          });
+          if (gen !== pipelineGenRef.current) return;
+          if (!gapsResponse.ok) {
+            throw new Error("Gap analysis failed");
+          }
+          const gapsData = (await gapsResponse.json()) as {
+            checklist: ChecklistItem[];
+            message?: string | null;
+            skipped?: string | null;
+          };
+          setPayload((current) =>
+            current ? { ...current, checklist: gapsData.checklist } : current,
+          );
+          setGapsMessage(gapsData.message ?? "");
+          updateStep(gen, "gaps", {
+            status: gapsData.skipped ? "skipped" : "success",
+            detail: gapsData.skipped
+              ? gapsData.skipped.replaceAll("_", " ")
+              : `${gapsData.checklist.length} item${gapsData.checklist.length === 1 ? "" : "s"}`,
+            log: gapsData.message
+              ? `✓ ${gapsData.message}`
+              : gapsData.skipped
+                ? `skipped · ${gapsData.skipped}`
+                : `✓ gaps updated (${gapsData.checklist.length})`,
+          });
+        } finally {
+          if (gen === pipelineGenRef.current) setGapsLoading(false);
+        }
+        updateStep(gen, "complete", {
+          status: "success",
+          log:
+            extractedCount > 0
+              ? `✓ done · ${total} web · ${skipped} skipped`
+              : "✓ done",
+        });
+        if (gen === pipelineGenRef.current) {
+          setPipelineRun((current) =>
+            current ? { ...current, status: "success" } : current,
+          );
+        }
       }
     } catch (error) {
       if (gen !== pipelineGenRef.current) return;
@@ -725,6 +780,28 @@ export function NoteEditor({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ticked }),
     });
+  }
+
+  async function deleteChecklist(item: ChecklistItem) {
+    setPayload((current) =>
+      current
+        ? {
+            ...current,
+            checklist: current.checklist.filter((entry) => entry.id !== item.id),
+          }
+        : current,
+    );
+    const response = await fetch(`/api/checklist/${item.id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      setPayload((current) =>
+        current
+          ? { ...current, checklist: [...current.checklist, item] }
+          : current,
+      );
+      toast.error("Could not delete gap item");
+    }
   }
 
   if (!payload || !editor) {
@@ -970,9 +1047,9 @@ export function NoteEditor({
                 ) : null}
                 <div className="flex flex-col gap-3">
                   {payload.checklist.map((item) => (
-                    <label
+                    <div
                       key={item.id}
-                      className="flex cursor-pointer items-start gap-3 text-sm leading-6"
+                      className="group flex items-start gap-3 text-sm leading-6"
                     >
                       <button
                         type="button"
@@ -991,13 +1068,21 @@ export function NoteEditor({
                       <span
                         className={
                           item.ticked
-                            ? "text-muted-foreground line-through"
-                            : undefined
+                            ? "min-w-0 flex-1 text-muted-foreground line-through"
+                            : "min-w-0 flex-1"
                         }
                       >
                         {item.text}
                       </span>
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => void deleteChecklist(item)}
+                        className="mt-0.5 shrink-0 p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+                        aria-label="Delete gap item"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>
