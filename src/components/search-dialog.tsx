@@ -68,7 +68,7 @@ export function SearchDialog({
         showCloseButton={false}
         aria-describedby={undefined}
       >
-        <div className="flex h-12 items-center gap-3 border-b border-[#1c1c1c] px-4">
+        <div className="flex h-12 items-center gap-3 border-b border-border px-4">
           <Search size={16} className="text-muted-foreground" />
           <input
             autoFocus
@@ -76,7 +76,7 @@ export function SearchDialog({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => event.key === "Escape" && onClose()}
             placeholder="Search your notes"
-            className="h-full flex-1 bg-transparent text-[15px] leading-[1.2] tracking-[-0.01em] outline-none placeholder:text-[#555]"
+            className="h-full flex-1 bg-transparent text-[15px] leading-[1.2] tracking-[-0.01em] outline-none placeholder:text-muted-foreground"
           />
           <kbd className="font-mono text-[12px] text-muted-foreground">ESC</kbd>
         </div>
@@ -109,7 +109,7 @@ export function SearchDialog({
                     onOpenNote(result.id);
                     onClose();
                   }}
-                  className="block w-full rounded-[6px] px-3 py-2.5 text-left hover:bg-[#1a1a1a]"
+                  className="block w-full rounded-[6px] px-3 py-2.5 text-left hover:bg-muted"
                 >
                   <span className="block text-[15px] leading-5 tracking-[-0.01em]">
                     {result.title}
@@ -118,7 +118,7 @@ export function SearchDialog({
                     {result.path}
                   </span>
                   {result.snippet ? (
-                    <span className="mt-1.5 block truncate text-[14px] leading-4 text-[#777]">
+                    <span className="mt-1.5 block truncate text-[14px] leading-4 text-muted-foreground">
                       {result.snippet.replaceAll(/<\/?mark>/g, "")}
                     </span>
                   ) : null}

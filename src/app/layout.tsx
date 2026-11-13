@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Toaster } from "sonner";
+import Script from "next/script";
+import { AppearanceSync } from "@/components/appearance-sync";
+import { APPEARANCE_BOOT_SCRIPT } from "@/lib/appearance-preferences";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,13 +17,18 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className="dark h-full antialiased" suppressHydrationWarning>
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body
         className="flex min-h-full flex-col font-sans"
         suppressHydrationWarning
       >
+        <Script
+          id="appearance-boot"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }}
+        />
         {children}
-        <Toaster theme="dark" position="bottom-right" />
+        <AppearanceSync />
       </body>
     </html>
   );

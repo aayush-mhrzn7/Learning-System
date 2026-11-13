@@ -210,21 +210,21 @@ export function InlineChat({
             selectionRef.current = anchor.text;
             setOpen(true);
           }}
-          className="flex items-center gap-1.5 rounded-md border border-[#333] bg-[#141414] px-2.5 py-1.5 text-[13px] text-[#ddd] shadow-xl hover:border-[#555] hover:bg-[#1a1a1a]"
+          className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-[13px] text-foreground shadow-xl hover:border-foreground/25 hover:bg-muted"
         >
-          <MessageSquarePlus size={13} className="text-[#aaa]" />
+          <MessageSquarePlus size={13} className="text-muted-foreground" />
           Inline chat
-          <kbd className="ml-1 rounded border border-[#333] px-1 py-px text-[11px] text-[#777]">
+          <kbd className="ml-1 rounded border border-border px-1 py-px text-[11px] text-muted-foreground">
             ⌘J
           </kbd>
         </button>
       ) : (
-        <div className="w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-[#333] bg-[#111] shadow-2xl">
-          <div className="flex items-start gap-2 border-b border-[#2a2a2a] px-3 py-2">
-            <Sparkles size={13} className="mt-0.5 shrink-0 text-[#888]" />
-            <p className="min-w-0 flex-1 text-[13px] leading-4 text-[#999]">
-              <span className="text-[#666]">Selected · </span>
-              <span className="line-clamp-3 whitespace-pre-wrap text-[#ccc]">
+        <div className="w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl">
+          <div className="flex items-start gap-2 border-b border-border px-3 py-2">
+            <Sparkles size={13} className="mt-0.5 shrink-0 text-muted-foreground" />
+            <p className="min-w-0 flex-1 text-[13px] leading-4 text-muted-foreground">
+              <span className="text-muted-foreground/80">Selected · </span>
+              <span className="line-clamp-3 whitespace-pre-wrap text-foreground">
                 {preview}
               </span>
             </p>
@@ -232,28 +232,26 @@ export function InlineChat({
               type="button"
               aria-label="Close inline chat"
               onClick={closeChat}
-              className="rounded p-0.5 text-[#666] hover:bg-white/5 hover:text-[#ccc]"
+              className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               <X size={13} />
             </button>
           </div>
           {turns.length > 0 || busy ? (
-            <div className="max-h-48 space-y-2 overflow-y-auto border-b border-[#2a2a2a] px-3 py-2">
+            <div className="max-h-48 space-y-2 overflow-y-auto border-b border-border px-3 py-2">
               {turns.map((turn, index) => (
                 <p
                   key={`${turn.role}-${index}`}
-                  className={`whitespace-pre-wrap text-[13px] leading-4 ${
-                    turn.role === "user" ? "text-[#aaa]" : "text-[#ddd]"
-                  }`}
+                  className="whitespace-pre-wrap text-[13px] leading-4 text-foreground"
                 >
-                  <span className="text-[#666]">
+                  <span className="text-muted-foreground">
                     {turn.role === "user" ? "You · " : "Tutor · "}
                   </span>
                   {turn.content}
                 </p>
               ))}
               {busy ? (
-                <p className="flex items-center gap-1.5 text-[13px] text-[#777]">
+                <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
                   <LoaderCircle size={12} className="animate-spin" />
                   Thinking…
                 </p>
@@ -280,17 +278,17 @@ export function InlineChat({
               rows={2}
               disabled={busy}
               placeholder="Ask about this selection…"
-              className="w-full resize-none rounded-md border border-[#2a2a2a] bg-[#0a0a0a] px-2.5 py-2 text-[14px] leading-5 text-[#eee] outline-none placeholder:text-[#555] focus:border-[#444] disabled:opacity-60"
+              className="w-full resize-none rounded-md border border-border bg-muted px-2.5 py-2 text-[14px] leading-5 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring disabled:opacity-60"
             />
             <div className="mt-1.5 flex items-center justify-between px-0.5">
-              <span className="text-[12px] text-[#555]">
+              <span className="text-[12px] text-muted-foreground">
                 Enter to send · Esc to close
               </span>
               <button
                 type="button"
                 disabled={!draft.trim() || busy}
                 onClick={() => void send()}
-                className="rounded-md bg-white px-2 py-1 text-[12px] font-medium text-black disabled:opacity-30"
+                className="rounded-md bg-theme-accent px-2 py-1 text-[12px] font-medium text-white disabled:opacity-30"
               >
                 Send
               </button>

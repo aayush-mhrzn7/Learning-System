@@ -222,11 +222,11 @@ export function EditorMinimap({
 
   return (
     <aside
-      className="relative hidden w-14 shrink-0 self-stretch border-l border-border bg-black sm:block"
+      className="relative hidden w-14 shrink-0 self-stretch border-l border-border bg-muted/50 sm:block"
       aria-label="Document minimap"
     >
       <div
-        className="absolute left-1 right-1 top-1 cursor-pointer overflow-hidden rounded-md border border-[#2a2a2a] bg-[#0a0a0a]"
+        className="absolute left-1 right-1 top-1 cursor-pointer overflow-hidden rounded-md border border-border bg-card"
         style={{
           height: `max(2.5rem, calc(${mapFill * 100}% - 0.25rem))`,
         }}
@@ -238,10 +238,10 @@ export function EditorMinimap({
               key={`${block.kind}-${index}`}
               className={
                 block.kind === "heading"
-                  ? "absolute left-0 rounded-[1px] bg-[#3a3a3a]"
+                  ? "absolute left-0 rounded-[1px] bg-foreground/35"
                   : block.kind === "code"
-                    ? "absolute left-0 rounded-[1px] bg-[#222]"
-                    : "absolute left-0 rounded-[1px] bg-[#2a2a2a]"
+                    ? "absolute left-0 rounded-[1px] bg-theme-accent/45"
+                    : "absolute left-0 rounded-[1px] bg-foreground/18"
               }
               style={{
                 top: `${block.top * 100}%`,
@@ -251,7 +251,7 @@ export function EditorMinimap({
             />
           ))}
           <div
-            className="absolute inset-x-0 rounded-sm border border-white/25 bg-white/10"
+            className="absolute inset-x-0 rounded-sm border border-theme-accent/40 bg-theme-accent-soft"
             style={{
               top: `${viewport.top * 100}%`,
               height: `${Math.max(viewport.height * 100, 8)}%`,

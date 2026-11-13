@@ -205,7 +205,7 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
               size="icon"
               className={cn(
                 "h-7 w-7",
-                tool.active && "bg-[#222] text-foreground",
+                tool.active && "bg-accent text-foreground",
               )}
               onClick={tool.run}
               title={tool.label}
@@ -241,7 +241,7 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
           size="icon"
           className={cn(
             "h-7 w-7",
-            editor.isActive("link") && "bg-[#222] text-foreground",
+            editor.isActive("link") && "bg-accent text-foreground",
           )}
           onClick={openLinkDialog}
           title="Add or edit link"
@@ -264,7 +264,7 @@ export function FormattingToolbar({ editor }: { editor: Editor }) {
             <Unlink size={14} />
           </Button>
         ) : null}
-        <span className="ml-auto hidden font-mono text-[12px] text-[#555] md:block">
+        <span className="ml-auto hidden font-mono text-[12px] text-muted-foreground md:block">
           Markdown shortcuts supported
         </span>
       </div>

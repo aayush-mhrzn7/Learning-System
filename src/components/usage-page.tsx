@@ -33,7 +33,7 @@ function ChartCard({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-black/20 p-4",
+        "rounded-lg border border-border bg-muted/40 p-4",
         className,
       )}
     >
@@ -210,7 +210,7 @@ export function UsagePage({
           <div
             role="radiogroup"
             aria-label="Range"
-            className="flex shrink-0 rounded-md border border-border bg-black/40 p-0.5"
+            className="flex shrink-0 rounded-md border border-border bg-muted p-0.5"
           >
             {RANGE_OPTIONS.map((days) => (
               <button
@@ -255,7 +255,7 @@ function UsageSkeleton() {
         {Array.from({ length: 2 }).map((_, i) => (
           <div
             key={`hero-${i}`}
-            className="rounded-lg border border-border bg-black/20 px-4 py-4"
+            className="rounded-lg border border-border bg-muted/40 px-4 py-4"
           >
             <Skeleton className="h-3 w-24" />
             <Skeleton className="mt-3 h-9 w-20" />
@@ -267,7 +267,7 @@ function UsageSkeleton() {
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={`stat-${i}`}
-            className="rounded-lg border border-border bg-black/20 px-3 py-2.5"
+            className="rounded-lg border border-border bg-muted/40 px-3 py-2.5"
           >
             <Skeleton className="h-3 w-14" />
             <Skeleton className="mt-2 h-4 w-16" />
@@ -277,7 +277,7 @@ function UsageSkeleton() {
 
       <Skeleton className="h-3 w-72 max-w-full" />
 
-      <div className="rounded-lg border border-border bg-black/20">
+      <div className="rounded-lg border border-border bg-muted/40">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
           <Skeleton className="h-3 w-28" />
           <Skeleton className="h-3 w-12" />
@@ -314,7 +314,7 @@ function UsageSkeleton() {
         {Array.from({ length: 3 }).map((_, i) => (
           <div
             key={`chart-${i}`}
-            className="rounded-lg border border-border bg-black/20 p-4"
+            className="rounded-lg border border-border bg-muted/40 p-4"
           >
             <Skeleton className="mb-3 h-3 w-24" />
             <Skeleton className="h-32 w-full" />
@@ -344,7 +344,7 @@ function UsageBody({ summary }: { summary: UsageSummary }) {
   return (
     <div className="flex w-full flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-black/20 px-4 py-4">
+        <div className="rounded-lg border border-border bg-muted/40 px-4 py-4">
           <p className="text-[11px] text-muted-foreground">
             Calls · {rangeLabel}
           </p>
@@ -352,7 +352,7 @@ function UsageBody({ summary }: { summary: UsageSummary }) {
             {totals.calls}
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-black/20 px-4 py-4">
+        <div className="rounded-lg border border-border bg-muted/40 px-4 py-4">
           <p className="text-[11px] text-muted-foreground">
             Estimated cost · {rangeLabel}
           </p>
@@ -376,7 +376,7 @@ function UsageBody({ summary }: { summary: UsageSummary }) {
         ].map((card) => (
           <div
             key={card.label}
-            className="rounded-lg border border-border bg-black/20 px-3 py-2.5"
+            className="rounded-lg border border-border bg-muted/40 px-3 py-2.5"
           >
             <p className="text-[11px] text-muted-foreground">{card.label}</p>
             <p className="mt-1 truncate text-sm text-foreground">{card.value}</p>
@@ -389,7 +389,7 @@ function UsageBody({ summary }: { summary: UsageSummary }) {
         local price map — OpenAI billing is source of truth.
       </p>
 
-      <div className="rounded-lg border border-border bg-black/20">
+      <div className="rounded-lg border border-border bg-muted/40">
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
           <p className="text-xs text-foreground">Recent requests</p>
           {summary.recent.length > 0 ? (

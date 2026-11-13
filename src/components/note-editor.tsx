@@ -52,11 +52,27 @@ import {
 } from "@/components/ui/dialog";
 import { documentToText } from "@/lib/editor-text";
 import {
+  CLAIM_HIGHLIGHTS_CHANGED_EVENT,
+  CONTENT_WIDTH_CHANGED_EVENT,
+  FONT_FAMILY_CHANGED_EVENT,
   FONT_SIZE_CHANGED_EVENT,
+  LINE_HEIGHT_CHANGED_EVENT,
   MINIMAP_CHANGED_EVENT,
+  SPELLCHECK_CHANGED_EVENT,
+  TOOLBAR_CHANGED_EVENT,
+  readClaimHighlights,
+  readContentWidth,
+  readFontFamily,
   readFontSize,
+  readLineHeight,
   readMinimapEnabled,
+  readSpellcheckEnabled,
+  readToolbarEnabled,
+  type ClaimHighlightsOption,
+  type ContentWidthOption,
+  type FontFamilyOption,
   type FontSizeOption,
+  type LineHeightOption,
 } from "@/lib/editor-preferences";
 import { markdownTableToHtml } from "@/lib/markdown-table";
 import type {
@@ -195,6 +211,13 @@ export function NoteEditor({
   const [minimapRevision, setMinimapRevision] = useState(0);
   const [minimapEnabled, setMinimapEnabled] = useState(true);
   const [fontSize, setFontSize] = useState<FontSizeOption>("md");
+  const [lineHeight, setLineHeight] = useState<LineHeightOption>("default");
+  const [contentWidth, setContentWidth] = useState<ContentWidthOption>("wide");
+  const [toolbarEnabled, setToolbarEnabled] = useState(true);
+  const [spellcheckEnabled, setSpellcheckEnabled] = useState(true);
+  const [fontFamily, setFontFamily] = useState<FontFamilyOption>("sf-pro");
+  const [claimHighlights, setClaimHighlights] =
+    useState<ClaimHighlightsOption>("strong");
 
   useEffect(() => {
     titleRef.current = title;
@@ -225,6 +248,73 @@ export function NoteEditor({
     }
     window.addEventListener(FONT_SIZE_CHANGED_EVENT, onChange);
     return () => window.removeEventListener(FONT_SIZE_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setLineHeight(readLineHeight());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ value: LineHeightOption }>).detail;
+      setLineHeight(detail?.value ?? readLineHeight());
+    }
+    window.addEventListener(LINE_HEIGHT_CHANGED_EVENT, onChange);
+    return () =>
+      window.removeEventListener(LINE_HEIGHT_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setContentWidth(readContentWidth());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ value: ContentWidthOption }>)
+        .detail;
+      setContentWidth(detail?.value ?? readContentWidth());
+    }
+    window.addEventListener(CONTENT_WIDTH_CHANGED_EVENT, onChange);
+    return () =>
+      window.removeEventListener(CONTENT_WIDTH_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setToolbarEnabled(readToolbarEnabled());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ enabled: boolean }>).detail;
+      setToolbarEnabled(detail?.enabled ?? readToolbarEnabled());
+    }
+    window.addEventListener(TOOLBAR_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(TOOLBAR_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setSpellcheckEnabled(readSpellcheckEnabled());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ enabled: boolean }>).detail;
+      setSpellcheckEnabled(detail?.enabled ?? readSpellcheckEnabled());
+    }
+    window.addEventListener(SPELLCHECK_CHANGED_EVENT, onChange);
+    return () =>
+      window.removeEventListener(SPELLCHECK_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setFontFamily(readFontFamily());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ value: FontFamilyOption }>).detail;
+      setFontFamily(detail?.value ?? readFontFamily());
+    }
+    window.addEventListener(FONT_FAMILY_CHANGED_EVENT, onChange);
+    return () =>
+      window.removeEventListener(FONT_FAMILY_CHANGED_EVENT, onChange);
+  }, []);
+
+  useEffect(() => {
+    setClaimHighlights(readClaimHighlights());
+    function onChange(event: Event) {
+      const detail = (event as CustomEvent<{ value: ClaimHighlightsOption }>)
+        .detail;
+      setClaimHighlights(detail?.value ?? readClaimHighlights());
+    }
+    window.addEventListener(CLAIM_HIGHLIGHTS_CHANGED_EVENT, onChange);
+    return () =>
+      window.removeEventListener(CLAIM_HIGHLIGHTS_CHANGED_EVENT, onChange);
   }, []);
 
   useEffect(() => {
@@ -280,6 +370,9 @@ export function NoteEditor({
         class: "learning-editor",
         spellcheck: "true",
         "data-font-size": "md",
+        "data-font-family": "sf-pro",
+        "data-line-height": "default",
+        "data-claim-highlights": "strong",
       },
       handlePaste(view, event) {
         const items = Array.from(event.clipboardData?.items ?? []);
@@ -331,9 +424,22 @@ export function NoteEditor({
 
   useEffect(() => {
     if (!editor) return;
-    editor.view.dom.setAttribute("data-font-size", fontSize);
+    const dom = editor.view.dom;
+    dom.setAttribute("data-font-size", fontSize);
+    dom.setAttribute("data-font-family", fontFamily);
+    dom.setAttribute("data-line-height", lineHeight);
+    dom.setAttribute("data-claim-highlights", claimHighlights);
+    dom.setAttribute("spellcheck", spellcheckEnabled ? "true" : "false");
     setMinimapRevision((value) => value + 1);
-  }, [editor, fontSize]);
+  }, [
+    editor,
+    fontSize,
+    fontFamily,
+    lineHeight,
+    claimHighlights,
+    spellcheckEnabled,
+    contentWidth,
+  ]);
 
   useEffect(() => {
     if (window.matchMedia("(min-width: 768px)").matches) {
@@ -1056,7 +1162,7 @@ export function NoteEditor({
                 <span className="truncate">Retry fact-check</span>
               </button>
             ) : null}
-            <span className="ml-auto shrink-0 text-[11px] text-[#666] sm:hidden">
+            <span className="ml-auto shrink-0 text-[11px] text-muted-foreground sm:hidden">
               {saveState === "saving"
                 ? "Saving…"
                 : saveState === "error"
@@ -1066,7 +1172,7 @@ export function NoteEditor({
           </div>
 
           <div className="ml-auto flex items-center justify-end gap-1.5 overflow-x-auto sm:gap-2">
-            <span className="mr-1 hidden shrink-0 text-[11px] text-[#666] sm:inline">
+            <span className="mr-1 hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
               {saveState === "saving"
                 ? "Saving…"
                 : saveState === "error"
@@ -1127,7 +1233,9 @@ export function NoteEditor({
             </button>
           </div>
         </header>
-        {readOnly ? null : <FormattingToolbar editor={editor} />}
+        {readOnly || !toolbarEnabled ? null : (
+          <FormattingToolbar editor={editor} />
+        )}
 
         <div className="relative flex min-h-0 flex-1">
           <div
@@ -1139,7 +1247,8 @@ export function NoteEditor({
           >
             <article
               ref={contentRef}
-              className="w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20"
+              data-content-width={contentWidth}
+              className="learning-note-article w-full px-4 pb-24 pt-6 sm:px-14 sm:pb-32 sm:pt-10 lg:px-20"
             >
             <textarea
               ref={titleInputRef}
@@ -1167,7 +1276,7 @@ export function NoteEditor({
                   editor.chain().focus("start").run();
                 }
               }}
-              className={`mb-3 w-full resize-none overflow-hidden bg-transparent text-[1.75rem] font-semibold leading-tight tracking-[-0.035em] outline-none placeholder:text-[#444] sm:text-4xl ${
+              className={`mb-3 w-full resize-none overflow-hidden bg-transparent text-[1.75rem] font-semibold leading-tight tracking-[-0.035em] outline-none placeholder:text-muted-foreground sm:text-4xl ${
                 readOnly ? "cursor-default caret-transparent" : ""
               }`}
               placeholder="Untitled"
@@ -1177,6 +1286,10 @@ export function NoteEditor({
             <div
               onMouseOver={(event) => {
                 if (hoverTimer.current) window.clearTimeout(hoverTimer.current);
+                if (claimHighlights === "off") {
+                  setHovered(null);
+                  return;
+                }
                 const target = (
                   event.target as HTMLElement
                 ).closest<HTMLElement>("[data-claim-id]");
@@ -1264,7 +1377,7 @@ export function NoteEditor({
                         className={`mt-1 grid h-4 w-4 shrink-0 place-items-center border ${
                           item.ticked
                             ? "border-foreground bg-foreground text-background"
-                            : "border-[#555]"
+                            : "border-border"
                         }`}
                         aria-label={
                           item.ticked ? "Mark incomplete" : "Complete"
@@ -1328,16 +1441,16 @@ export function NoteEditor({
               );
             }}
           >
-            <div className="border border-[#333] bg-[#111] p-4 shadow-2xl">
+            <div className="border border-border bg-popover p-4 text-popover-foreground shadow-2xl">
               <p className="mb-2 text-[12px] uppercase tracking-[0.18em] text-muted-foreground">
                 {hovered.claim.stale ? "Stale result" : hovered.claim.verdict}
               </p>
-              <p className="text-xs leading-5 text-[#ddd]">
+              <p className="text-xs leading-5 text-foreground">
                 {hovered.claim.reason}
               </p>
               <button
                 type="button"
-                className="mt-3 text-left text-[13px] text-[#aaa] underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                className="mt-3 text-left text-[13px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground"
                 onClick={() => {
                   const claim = hovered.claim;
                   setInlineChatSeed({
@@ -1358,7 +1471,7 @@ export function NoteEditor({
                       href={source.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="block truncate text-[13px] text-muted-foreground underline decoration-[#555] underline-offset-2 hover:text-foreground"
+                      className="block truncate text-[13px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground"
                     >
                       {source.title}
                     </a>

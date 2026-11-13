@@ -725,7 +725,7 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      className="relative flex h-dvh w-full shrink-0 flex-col border-r border-border bg-[#080808] md:h-screen"
+      className="relative flex h-dvh w-full shrink-0 flex-col border-r border-border bg-sidebar md:h-screen"
       style={props.mobile ? undefined : { width }}
     >
       {props.mobile ? null : (
@@ -751,7 +751,7 @@ export function Sidebar(props: SidebarProps) {
               return next;
             });
           }}
-          className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-white/10 active:bg-white/20"
+          className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-theme-accent/25 active:bg-theme-accent/40"
         />
       )}
       <div className="flex h-14 items-center justify-between border-b border-border px-3 sm:px-4">
@@ -769,7 +769,7 @@ export function Sidebar(props: SidebarProps) {
 
       <button
         onClick={props.onSearch}
-        className="mx-3 mt-3 flex h-10 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-[#444] hover:text-foreground sm:h-9"
+        className="mx-3 mt-3 flex h-10 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground sm:h-9"
       >
         <Search size={14} />
         Search
@@ -778,7 +778,7 @@ export function Sidebar(props: SidebarProps) {
 
       <button
         onClick={props.onKnowledgeGraph}
-        className="mx-3 mt-2 flex h-10 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-[#444] hover:text-foreground sm:h-9"
+        className="mx-3 mt-2 flex h-10 items-center gap-2 border border-border px-3 text-left text-xs text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground sm:h-9"
       >
         <GraphStar size={14} />
         Knowledge graph
@@ -897,7 +897,9 @@ export function Sidebar(props: SidebarProps) {
             {/* Empty sidebar space — drop here to move to root (no labeled strip). */}
             <div
               className={`min-h-8 flex-1 ${
-                dropTargetId === ROOT_DROP_ID ? "rounded-sm bg-[#1f2a1f]/50" : ""
+                dropTargetId === ROOT_DROP_ID
+                  ? "rounded-sm bg-theme-accent-soft"
+                  : ""
               }`}
               onClick={() => setSelectedDirectoryId(null)}
               onDragOver={(event) => {
@@ -1216,8 +1218,8 @@ function TreeNoteRow({
           onClick={onOpen}
           className={`sidebar-row w-full truncate ${
             selected
-              ? "bg-[#171717] text-foreground"
-              : "text-muted-foreground hover:bg-[#111] hover:text-foreground"
+              ? "bg-sidebar-accent text-foreground"
+              : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground"
           }`}
         >
           {note.kind === "visualize" ? (
@@ -1304,12 +1306,12 @@ function DirectoryNode(props: DirectoryNodeProps) {
               }
             }}
             onDrop={handleDirectoryDrop}
-            className={`group flex h-8 items-center gap-1 rounded-sm px-1 text-xs hover:bg-[#121212] ${
+            className={`group flex h-8 items-center gap-1 rounded-sm px-1 text-xs hover:bg-sidebar-accent/70 ${
               isDropTarget
-                ? "bg-[#1f2a1f] text-foreground ring-1 ring-emerald-700/60"
+                ? "bg-theme-accent-soft text-foreground ring-1 ring-theme-accent/50"
                 : selected
-                  ? "bg-[#171717] text-foreground"
-                  : "text-[#c4c4c4]"
+                  ? "bg-sidebar-accent text-foreground"
+                  : "text-muted-foreground"
             }`}
           >
             <button
@@ -1384,7 +1386,7 @@ function DirectoryNode(props: DirectoryNodeProps) {
       </ContextMenu>
 
       {open ? (
-        <div className="ml-3 border-l border-[#202020] pl-2">
+        <div className="ml-3 border-l border-sidebar-border pl-2">
           {children.map((directory) => (
             <DirectoryNode
               {...props}

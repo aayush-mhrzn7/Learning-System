@@ -305,35 +305,38 @@ export function VisualizeNote({
   const empty = !started;
 
   return (
-    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black">
-      {sidebarCollapsed ? (
-        <button
-          onClick={onOpenSidebar}
-          className="icon-button absolute left-3 top-3 z-10 sm:left-4 sm:top-4"
-          aria-label="Open sidebar"
-        >
-          <PanelLeftOpen size={16} />
-        </button>
-      ) : null}
-
+    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       {empty ? (
-        <div className="flex flex-1 flex-col items-center justify-center px-4 pb-16">
-          <h1 className="mb-2 text-center text-2xl font-medium tracking-tight text-white sm:text-3xl">
-            What should we visualize?
-          </h1>
-          <p className="mb-8 max-w-md text-center text-xs text-[#777]">
-            Software, architecture, algorithms, and data flows only — not a
-            general chatbot.
-          </p>
-          <div className="w-full max-w-2xl">
-            <PromptBox
-              inputRef={inputRef}
-              draft={draft}
-              setDraft={setDraft}
-              busy={busy}
-              onSend={() => void send()}
-              placeholder="e.g. How does a transformer work?"
-            />
+        <div className="flex flex-1 flex-col">
+          {sidebarCollapsed ? (
+            <div className="flex shrink-0 items-center px-3 pt-3 sm:px-4 sm:pt-4">
+              <button
+                onClick={onOpenSidebar}
+                className="icon-button shrink-0"
+                aria-label="Open sidebar"
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            </div>
+          ) : null}
+          <div className="flex flex-1 flex-col items-center justify-center px-4 pb-16">
+            <h1 className="mb-2 text-center text-2xl font-medium tracking-tight text-white sm:text-3xl">
+              What should we visualize?
+            </h1>
+            <p className="mb-8 max-w-md text-center text-xs text-[#777]">
+              Software, architecture, algorithms, and data flows only — not a
+              general chatbot.
+            </p>
+            <div className="w-full max-w-2xl">
+              <PromptBox
+                inputRef={inputRef}
+                draft={draft}
+                setDraft={setDraft}
+                busy={busy}
+                onSend={() => void send()}
+                placeholder="e.g. How does a transformer work?"
+              />
+            </div>
           </div>
         </div>
       ) : (
@@ -348,6 +351,15 @@ export function VisualizeNote({
 
           <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
             <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-[#888]">
+              {sidebarCollapsed ? (
+                <button
+                  onClick={onOpenSidebar}
+                  className="icon-button shrink-0"
+                  aria-label="Open sidebar"
+                >
+                  <PanelLeftOpen size={16} />
+                </button>
+              ) : null}
               <DiagramFlowHorizontal size={13} />
               <span className="truncate font-medium text-[#ccc]">{title}</span>
             </div>
@@ -600,22 +612,21 @@ function VisualizeNoteSkeleton({
 
   return (
     <main
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
       aria-busy="true"
       aria-label="Loading visualize note"
     >
-      {sidebarCollapsed ? (
-        <button
-          onClick={onOpenSidebar}
-          className="icon-button absolute left-3 top-3 z-10 sm:left-4 sm:top-4"
-          aria-label="Open sidebar"
-        >
-          <PanelLeftOpen size={16} />
-        </button>
-      ) : null}
-
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
         <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-[#888]">
+          {sidebarCollapsed ? (
+            <button
+              onClick={onOpenSidebar}
+              className="icon-button shrink-0"
+              aria-label="Open sidebar"
+            >
+              <PanelLeftOpen size={16} />
+            </button>
+          ) : null}
           <DiagramFlowHorizontal size={13} />
           <Skeleton className="h-3.5 w-48 max-w-[60%]" />
         </div>

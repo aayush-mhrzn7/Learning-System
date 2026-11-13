@@ -187,7 +187,7 @@ export function ActivityPipeline({
         onClick={onClose}
       />
       <aside
-        className="fixed inset-y-0 right-0 z-50 flex h-dvh max-md:!w-[min(100vw-3rem,22rem)] shrink-0 flex-col border-l border-border bg-[#080808] shadow-2xl md:relative md:z-auto md:h-screen md:shadow-none"
+        className="fixed inset-y-0 right-0 z-50 flex h-dvh max-md:!w-[min(100vw-3rem,22rem)] shrink-0 flex-col border-l border-border bg-sidebar shadow-2xl md:relative md:z-auto md:h-screen md:shadow-none"
         style={{ width }}
       >
         <div
@@ -289,7 +289,7 @@ function PipelineStepRow({ step }: { step: PipelineStep }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-start gap-2 px-2 py-2 text-left hover:bg-[#101010]"
+        className="flex w-full items-start gap-2 px-2 py-2 text-left hover:bg-muted"
         aria-expanded={open}
       >
         <StepIcon status={step.status} />
@@ -322,7 +322,7 @@ function PipelineStepRow({ step }: { step: PipelineStep }) {
       </button>
 
       {open && hasLogs ? (
-        <pre className="mx-2 mb-2 max-h-64 overflow-auto border border-border/50 bg-[#050505] px-2.5 py-2 font-mono text-[12px] leading-4 text-[#bdbdbd] whitespace-pre-wrap break-words">
+        <pre className="mx-2 mb-2 max-h-64 overflow-auto border border-border/50 bg-muted px-2.5 py-2 font-mono text-[12px] leading-4 text-foreground whitespace-pre-wrap break-words">
           {step.logs.join("\n")}
         </pre>
       ) : null}
@@ -355,10 +355,10 @@ function StepIcon({ status }: { status: PipelineStepStatus }) {
   }
   if (status === "skipped") {
     return (
-      <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border border-[#444] text-[10px] text-muted-foreground">
+      <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border border-border text-[10px] text-muted-foreground">
         –
       </span>
     );
   }
-  return <Circle size={14} className="mt-0.5 shrink-0 text-[#333]" />;
+  return <Circle size={14} className="mt-0.5 shrink-0 text-muted-foreground" />;
 }
