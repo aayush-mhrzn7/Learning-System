@@ -1,16 +1,16 @@
-export const COLOR_SCHEME_KEY = "learning-color-scheme";
+const COLOR_SCHEME_KEY = "learning-color-scheme";
 export const COLOR_SCHEME_CHANGED_EVENT = "learning-color-scheme-changed";
 
 /** @deprecated migrated into light/dark keys */
-export const APP_THEME_KEY = "learning-app-theme";
-export const APP_THEME_LIGHT_KEY = "learning-app-theme-light";
-export const APP_THEME_DARK_KEY = "learning-app-theme-dark";
+const APP_THEME_KEY = "learning-app-theme";
+const APP_THEME_LIGHT_KEY = "learning-app-theme-light";
+const APP_THEME_DARK_KEY = "learning-app-theme-dark";
 export const APP_THEME_CHANGED_EVENT = "learning-app-theme-changed";
 
-export const ACCENT_ONLY_KEY = "learning-accent-only";
+const ACCENT_ONLY_KEY = "learning-accent-only";
 export const ACCENT_ONLY_CHANGED_EVENT = "learning-accent-only-changed";
 
-export const REDUCE_MOTION_KEY = "learning-reduce-motion";
+const REDUCE_MOTION_KEY = "learning-reduce-motion";
 export const REDUCE_MOTION_CHANGED_EVENT = "learning-reduce-motion-changed";
 
 export const COLOR_SCHEME_OPTIONS = ["system", "light", "dark"] as const;

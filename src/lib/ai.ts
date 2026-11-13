@@ -13,9 +13,9 @@ const EXTRACT_CHUNK_CHARS = 2800;
 const DECISION_BATCH_SIZE = 40;
 
 /** Only claims with P(likely wrong) above this get a paid web fact-check. */
-export const CLAIM_WEB_CHECK_THRESHOLD = 0.7;
+const CLAIM_WEB_CHECK_THRESHOLD = 0.7;
 /** Hard cap after extract — Decisions never sees a 50-claim firehose. */
-export const MAX_EXTRACTED_CLAIMS = 8;
+const MAX_EXTRACTED_CLAIMS = 8;
 /** Hard cap on paid web judges per run (highest suspicion first). */
 export const MAX_WEB_JUDGES = 5;
 
@@ -935,7 +935,7 @@ function peekJsonString(raw: string, key: string): string | undefined {
   return out;
 }
 
-export type VisualizeStreamEvent =
+type VisualizeStreamEvent =
   | { type: "delta"; reply: string; explanation: string }
   | { type: "done"; turn: VisualizeTurnResult }
   | { type: "error"; error: string };
@@ -1026,27 +1026,6 @@ export async function* streamVisualizeTurn(
         error instanceof Error ? error.message : "Visualize request failed",
     };
   }
-}
-
-/** Tiny architecture/algorithm diagram turn — rejects general chat. */
-export async function answerVisualizeTurn(
-  credentials: ResolvedProviderCredentials,
-  args: {
-    message: string;
-    history?: { role: "user" | "assistant"; content: string }[];
-    hasDiagram: boolean;
-  },
-): Promise<VisualizeTurnResult> {
-  const data = await structuredResponse<unknown>(
-    credentials,
-    "visualize",
-    "visualize_turn",
-    visualizeSchemaPayload,
-    visualizeInstructions,
-    packVisualizeInput(args),
-    false,
-  );
-  return finalizeVisualizeTurn(data);
 }
 
 /** Tutor reply about a selected passage — no web search, no note rewrites. */

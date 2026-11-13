@@ -1,20 +1,8 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { directories } from "@/db/schema";
 import { requireUserId } from "@/lib/auth";
 import { directoryCreateSchema } from "@/lib/schemas";
-
-export async function GET() {
-  const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
-
-  const rows = await db
-    .select()
-    .from(directories)
-    .where(and(eq(directories.userId, userId), isNull(directories.deletedAt)))
-    .orderBy(asc(directories.name));
-  return Response.json({ directories: rows });
-}
 
 export async function POST(request: Request) {
   const { userId, error } = await requireUserId();

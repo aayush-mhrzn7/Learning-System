@@ -10,34 +10,6 @@ import {
 
 type Context = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, context: Context) {
-  const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
-
-  const { id } = await context.params;
-  if (!idSchema.safeParse(id).success) {
-    return Response.json({ error: "Invalid directory" }, { status: 400 });
-  }
-
-  const [directory] = await db
-    .select()
-    .from(directories)
-    .where(
-      and(
-        eq(directories.id, id),
-        eq(directories.userId, userId),
-        isNull(directories.deletedAt),
-      ),
-    )
-    .limit(1);
-
-  if (!directory) {
-    return Response.json({ error: "Directory not found" }, { status: 404 });
-  }
-
-  return Response.json({ directory });
-}
-
 export async function PATCH(request: Request, context: Context) {
   const { userId, error } = await requireUserId();
   if (error || !userId) return error!;

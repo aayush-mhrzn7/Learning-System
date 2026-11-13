@@ -1,25 +1,25 @@
-export const MINIMAP_ENABLED_KEY = "learning-minimap-enabled";
+const MINIMAP_ENABLED_KEY = "learning-minimap-enabled";
 export const MINIMAP_CHANGED_EVENT = "learning-minimap-changed";
 
-export const FONT_SIZE_KEY = "learning-editor-font-size";
+const FONT_SIZE_KEY = "learning-editor-font-size";
 export const FONT_SIZE_CHANGED_EVENT = "learning-font-size-changed";
 
-export const LINE_HEIGHT_KEY = "learning-editor-line-height";
+const LINE_HEIGHT_KEY = "learning-editor-line-height";
 export const LINE_HEIGHT_CHANGED_EVENT = "learning-line-height-changed";
 
-export const CONTENT_WIDTH_KEY = "learning-editor-content-width";
+const CONTENT_WIDTH_KEY = "learning-editor-content-width";
 export const CONTENT_WIDTH_CHANGED_EVENT = "learning-content-width-changed";
 
-export const TOOLBAR_ENABLED_KEY = "learning-editor-toolbar-enabled";
+const TOOLBAR_ENABLED_KEY = "learning-editor-toolbar-enabled";
 export const TOOLBAR_CHANGED_EVENT = "learning-toolbar-changed";
 
-export const SPELLCHECK_ENABLED_KEY = "learning-editor-spellcheck-enabled";
+const SPELLCHECK_ENABLED_KEY = "learning-editor-spellcheck-enabled";
 export const SPELLCHECK_CHANGED_EVENT = "learning-spellcheck-changed";
 
-export const FONT_FAMILY_KEY = "learning-editor-font-family";
+const FONT_FAMILY_KEY = "learning-editor-font-family";
 export const FONT_FAMILY_CHANGED_EVENT = "learning-font-family-changed";
 
-export const CLAIM_HIGHLIGHTS_KEY = "learning-editor-claim-highlights";
+const CLAIM_HIGHLIGHTS_KEY = "learning-editor-claim-highlights";
 export const CLAIM_HIGHLIGHTS_CHANGED_EVENT = "learning-claim-highlights-changed";
 
 export const FONT_SIZE_OPTIONS = ["sm", "md", "lg", "xl"] as const;

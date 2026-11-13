@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { aiUsage } from "@/db/schema";
 import type { ProviderId } from "@/lib/providers";
 
-export type AiApi = "responses" | "decisions";
+type AiApi = "responses" | "decisions";
 export type AiTask =
   | "extract"
   | "decide"
@@ -13,7 +13,7 @@ export type AiTask =
   | "visualize"
   | "reformat";
 
-export type RecordAiUsageInput = {
+type RecordAiUsageInput = {
   userId: string;
   provider: ProviderId;
   model: string;
@@ -41,7 +41,7 @@ const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
 const WEB_SEARCH_USD = 0.025;
 const RECENT_LIMIT = 50;
 
-export function estimateCostUsd(args: {
+function estimateCostUsd(args: {
   model: string;
   inputTokens: number;
   outputTokens: number;

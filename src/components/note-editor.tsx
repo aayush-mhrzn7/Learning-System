@@ -415,10 +415,7 @@ export function NoteEditor({
     },
     onUpdate: () => {
       if (!loadingContent.current) scheduleSave();
-      if (minimapTimer.current) window.clearTimeout(minimapTimer.current);
-      minimapTimer.current = window.setTimeout(() => {
-        setMinimapRevision((value) => value + 1);
-      }, 200);
+      scheduleMinimapRefresh();
     },
   });
 
@@ -509,6 +506,13 @@ export function NoteEditor({
       () => void saveNowRef.current(),
       1000,
     );
+  }
+
+  function scheduleMinimapRefresh() {
+    if (minimapTimer.current) window.clearTimeout(minimapTimer.current);
+    minimapTimer.current = window.setTimeout(() => {
+      setMinimapRevision((value) => value + 1);
+    }, 200);
   }
 
   useEffect(() => {
@@ -1261,6 +1265,7 @@ export function NoteEditor({
                 titleRef.current = next;
                 onTitleChange(noteId, next.trim() || "Untitled");
                 scheduleSave();
+                scheduleMinimapRefresh();
               }}
               onBlur={() => {
                 if (!title.trim()) {

@@ -25,14 +25,14 @@ function readActivityWidth() {
 
 export type PipelineKind = "fact-check" | "publish" | "re-publish";
 
-export type PipelineStepStatus =
+type PipelineStepStatus =
   | "pending"
   | "running"
   | "success"
   | "failed"
   | "skipped";
 
-export type PipelineStep = {
+type PipelineStep = {
   id: string;
   label: string;
   detail?: string;
