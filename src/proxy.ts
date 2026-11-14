@@ -7,6 +7,7 @@ export async function proxy(request: NextRequest) {
     pathname === "/login" ||
     pathname === "/signup" ||
     pathname === "/forgot-password" ||
+    pathname === "/verify-email" ||
     pathname.startsWith("/api/auth/");
   const authenticated = Boolean(
     await verifySessionToken(request.cookies.get(authCookie.name)?.value),

@@ -37,8 +37,23 @@ function LoginForm() {
       body: JSON.stringify({
         email: form.get("email"),
         password: form.get("password"),
+        lang: navigator.language,
       }),
     });
+
+    if (response.status === 403) {
+      const data = (await response.json().catch(() => null)) as {
+        unverified?: boolean;
+      } | null;
+      if (data?.unverified) {
+        const email = String(form.get("email") ?? "").trim().toLowerCase();
+        const params = new URLSearchParams({ email });
+        const next = searchParams.get("next");
+        if (next) params.set("next", next);
+        router.replace(`/verify-email?${params}`);
+        return;
+      }
+    }
 
     if (!response.ok) {
       setError("Incorrect email or password");

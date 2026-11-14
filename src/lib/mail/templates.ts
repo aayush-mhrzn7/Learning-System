@@ -8,6 +8,11 @@ type Copy = {
   welcomeTitle: string;
   welcomeBody: string;
   welcomeButton: string;
+  verifySubject: string;
+  verifyTitle: string;
+  verifyBody: string;
+  verifyButton: string;
+  verifyIgnore: string;
   otpSubject: string;
   otpTitle: string;
   otpBody: string;
@@ -25,6 +30,12 @@ const COPY: Record<MailLanguage, Copy> = {
     welcomeBody:
       "Your account is ready. Write notes, visualize ideas, and connect what you learn in one place.",
     welcomeButton: "Open Scholar",
+    verifySubject: `Welcome to ${APP_NAME} — verify your email`,
+    verifyTitle: `Welcome to ${APP_NAME}`,
+    verifyBody:
+      "Your account is almost ready. Enter the code below to verify your email and start writing notes, visualizing ideas, and connecting what you learn.",
+    verifyButton: "Click here to verify",
+    verifyIgnore: "If you did not create an account, you can safely ignore this email.",
     otpSubject: `Your ${APP_NAME} password reset code`,
     otpTitle: "Reset your password",
     otpBody:
@@ -41,6 +52,12 @@ const COPY: Record<MailLanguage, Copy> = {
     welcomeBody:
       "तपाईंको खाता तयार छ। नोट लेख्नुहोस्, विचार देखाउनुहोस्, र सिकेका कुराहरू एकै ठाउँमा जोड्नुहोस्।",
     welcomeButton: `${APP_NAME} खोल्नुहोस्`,
+    verifySubject: `${APP_NAME} मा स्वागत छ — आफ्नो इमेल प्रमाणित गर्नुहोस्`,
+    verifyTitle: `${APP_NAME} मा स्वागत छ`,
+    verifyBody:
+      "तपाईंको खाता लगभग तयार छ। इमेल प्रमाणित गर्न तलको कोड प्रविष्ट गर्नुहोस् र नोट लेख्न, विचार देखाउन र सिकेका कुरा जोड्न सुरु गर्नुहोस्।",
+    verifyButton: "प्रमाणित गर्न यहाँ थिच्नुहोस्",
+    verifyIgnore: "तपाईंले खाता नबनाउनुभएको भए, यो इमेललाई बेवास्ता गर्न सक्नुहुन्छ।",
     otpSubject: `तपाईंको ${APP_NAME} पासवर्ड रिसेट कोड`,
     otpTitle: "पासवर्ड रिसेट गर्नुहोस्",
     otpBody:
@@ -57,6 +74,12 @@ const COPY: Record<MailLanguage, Copy> = {
     welcomeBody:
       "Tu cuenta está lista. Escribe notas, visualiza ideas y conecta lo que aprendes en un solo lugar.",
     welcomeButton: `Abrir ${APP_NAME}`,
+    verifySubject: `Bienvenido a ${APP_NAME}: verifica tu correo`,
+    verifyTitle: `Bienvenido a ${APP_NAME}`,
+    verifyBody:
+      "Tu cuenta está casi lista. Introduce el código de abajo para verificar tu correo y empezar a escribir notas, visualizar ideas y conectar lo que aprendes.",
+    verifyButton: "Haz clic aquí para verificar",
+    verifyIgnore: "Si no creaste una cuenta, puedes ignorar este correo.",
     otpSubject: `Tu código para restablecer la contraseña de ${APP_NAME}`,
     otpTitle: "Restablece tu contraseña",
     otpBody:
@@ -73,6 +96,12 @@ const COPY: Record<MailLanguage, Copy> = {
     welcomeBody:
       "Votre compte est prêt. Écrivez des notes, visualisez vos idées et reliez ce que vous apprenez au même endroit.",
     welcomeButton: `Ouvrir ${APP_NAME}`,
+    verifySubject: `Bienvenue sur ${APP_NAME} : vérifiez votre e-mail`,
+    verifyTitle: `Bienvenue sur ${APP_NAME}`,
+    verifyBody:
+      "Votre compte est presque prêt. Saisissez le code ci-dessous pour vérifier votre e-mail et commencer à écrire des notes, visualiser vos idées et relier ce que vous apprenez.",
+    verifyButton: "Cliquez ici pour vérifier",
+    verifyIgnore: "Si vous n'avez pas créé de compte, ignorez cet e-mail.",
     otpSubject: `Votre code de réinitialisation ${APP_NAME}`,
     otpTitle: "Réinitialisez votre mot de passe",
     otpBody:
@@ -190,6 +219,36 @@ export function welcomeEmail(lang: MailLanguage) {
       copy.footer,
     ),
     text: `${copy.welcomeTitle}\n\n${copy.welcomeBody}\n\n${url}`,
+  };
+}
+
+export function verifyEmailOtpEmail(
+  lang: MailLanguage,
+  options: { email: string; otp: string; expiresAt: number },
+) {
+  const copy = COPY[lang];
+  const link = new URL("/verify-email", appUrl());
+  link.searchParams.set("email", options.email);
+  link.searchParams.set("otp", options.otp);
+  link.searchParams.set("exp", String(options.expiresAt));
+
+  const content = `<p class="mut" style="margin:0 0 14px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#737373;">${escapeHtml(copy.otpCodeLabel)}</p>
+${codeBoxes(options.otp)}
+<p class="sub" style="margin:16px 0 32px;font-size:13px;color:#525252;">${escapeHtml(copy.otpExpiry)}</p>
+${button(link.toString(), copy.verifyButton)}
+<p class="mut" style="margin:32px 0 0;font-size:12px;line-height:1.6;color:#737373;">${escapeHtml(copy.verifyIgnore)}</p>`;
+
+  return {
+    subject: copy.verifySubject,
+    html: layout(
+      lang,
+      `${copy.otpCodeLabel}: ${options.otp}`,
+      copy.verifyTitle,
+      copy.verifyBody,
+      content,
+      copy.footer,
+    ),
+    text: `${copy.verifyTitle}\n\n${copy.verifyBody}\n\n${copy.otpCodeLabel}: ${options.otp}\n${link.toString()}\n\n${copy.otpExpiry}\n${copy.verifyIgnore}`,
   };
 }
 

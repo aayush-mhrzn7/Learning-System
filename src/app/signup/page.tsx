@@ -28,6 +28,7 @@ export default function SignupPage() {
       body: JSON.stringify({
         email: form.get("email"),
         password,
+        lang: navigator.language,
       }),
     });
 
@@ -40,8 +41,8 @@ export default function SignupPage() {
       return;
     }
 
-    router.replace("/");
-    router.refresh();
+    const email = String(form.get("email") ?? "").trim().toLowerCase();
+    router.replace(`/verify-email?email=${encodeURIComponent(email)}`);
   }
 
   return (

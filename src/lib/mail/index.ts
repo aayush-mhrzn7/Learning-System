@@ -1,15 +1,23 @@
 import { sendMail } from "./transport";
 import {
   resetOtpEmail,
-  welcomeEmail,
+  verifyEmailOtpEmail,
   type MailLanguage,
 } from "./templates";
 
 export { resolveMailLanguage, type MailLanguage } from "./templates";
 export { OTP_TTL_MS } from "./config";
 
-export function sendWelcomeEmail(to: string, lang: MailLanguage) {
-  return sendMail({ to, ...welcomeEmail(lang) });
+export function sendVerificationEmail(
+  to: string,
+  lang: MailLanguage,
+  otp: string,
+  expiresAt: number,
+) {
+  return sendMail({
+    to,
+    ...verifyEmailOtpEmail(lang, { email: to, otp, expiresAt }),
+  });
 }
 
 export function sendResetOtpEmail(
