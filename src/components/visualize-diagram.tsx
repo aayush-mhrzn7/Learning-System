@@ -180,11 +180,23 @@ async function svgToPngBlob(svgEl: SVGSVGElement): Promise<Blob> {
     clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
   }
 
-  // Serialized SVG loses Tailwind background — paint it into the export.
+  // The serialized SVG is rendered standalone, so CSS variables and Tailwind
+  // classes do not resolve — inline the computed colors and paint the background.
+  const bgColor = getComputedStyle(svgEl).backgroundColor;
+  const sources = svgEl.querySelectorAll("*");
+  const copies = clone.querySelectorAll("*");
+  sources.forEach((source, index) => {
+    const copy = copies[index];
+    if (!copy) return;
+    const computed = getComputedStyle(source);
+    if (computed.fill) copy.setAttribute("fill", computed.fill);
+    if (computed.stroke) copy.setAttribute("stroke", computed.stroke);
+    copy.removeAttribute("style");
+  });
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   bg.setAttribute("width", "100%");
   bg.setAttribute("height", "100%");
-  bg.setAttribute("fill", "#0a0a0a");
+  bg.setAttribute("fill", bgColor);
   clone.insertBefore(bg, clone.firstChild);
 
   const xml = new XMLSerializer().serializeToString(clone);
@@ -204,7 +216,7 @@ async function svgToPngBlob(svgEl: SVGSVGElement): Promise<Blob> {
     canvas.height = Math.max(1, Math.round(height));
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("canvas unavailable");
-    ctx.fillStyle = "#0a0a0a";
+    ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     return await new Promise<Blob>((resolve, reject) => {
@@ -253,7 +265,7 @@ export function VisualizeDiagramView({
       .attr("orient", "auto")
       .append("path")
       .attr("d", "M0,-4L8,0L0,4")
-      .attr("fill", "#666");
+      .style("fill", "color-mix(in oklab, var(--foreground) 55%, transparent)");
 
     const resolvedEdges = layout.edges
       .map((edge) => {
@@ -268,7 +280,7 @@ export function VisualizeDiagramView({
 
     g.append("g")
       .attr("fill", "none")
-      .attr("stroke", "#3a3a3a")
+      .style("stroke", "color-mix(in oklab, var(--foreground) 40%, transparent)")
       .attr("stroke-width", 1.4)
       .selectAll("path")
       .data(resolvedEdges)
@@ -283,7 +295,7 @@ export function VisualizeDiagramView({
       .selectAll("text")
       .data(resolvedEdges.filter((edge) => edge.label))
       .join("text")
-      .attr("fill", "#777")
+      .style("fill", "var(--muted-foreground)")
       .attr("font-size", 12)
       .attr("text-anchor", "middle")
       .attr("x", (d) => (d.x1 + d.x2) / 2)
@@ -305,13 +317,13 @@ export function VisualizeDiagramView({
       .attr("height", (d) => d.height)
       .attr("rx", 8)
       .attr("ry", 8)
-      .attr("fill", "#141414")
-      .attr("stroke", "#3a3a3a")
+      .style("fill", "var(--secondary)")
+      .style("stroke", "color-mix(in oklab, var(--foreground) 28%, transparent)")
       .attr("stroke-width", 1);
 
     node
       .append("text")
-      .attr("fill", "#e8e8e8")
+      .style("fill", "var(--foreground)")
       .attr("font-size", 13)
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "middle")
@@ -339,7 +351,7 @@ export function VisualizeDiagramView({
       <button
         type="button"
         onClick={() => void copyDiagram()}
-        className="absolute top-2 right-2 z-10 inline-flex h-7 items-center gap-1.5 rounded-md border border-[#333] bg-[#121212]/95 px-2 text-[12px] text-[#ccc] opacity-100 shadow-sm transition-colors hover:border-[#555] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        className="absolute top-2 right-2 z-10 inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-popover/95 px-2 text-[12px] text-muted-foreground opacity-100 shadow-sm transition-colors hover:border-foreground/40 hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
         aria-label="Copy diagram"
       >
         {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -347,7 +359,7 @@ export function VisualizeDiagramView({
       </button>
       <svg
         ref={ref}
-        className="w-full rounded-lg border border-[#222] bg-[#0a0a0a]"
+        className="w-full rounded-lg border border-border bg-card"
         role="img"
         aria-label="Architecture diagram"
       />

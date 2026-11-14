@@ -320,10 +320,10 @@ export function VisualizeNote({
             </div>
           ) : null}
           <div className="flex flex-1 flex-col items-center justify-center px-4 pb-16">
-            <h1 className="mb-2 text-center text-2xl font-medium tracking-tight text-white sm:text-3xl">
+            <h1 className="mb-2 text-center text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
               What should we visualize?
             </h1>
-            <p className="mb-8 max-w-md text-center text-xs text-[#777]">
+            <p className="mb-8 max-w-md text-center text-xs text-muted-foreground">
               Software, architecture, algorithms, and data flows only — not a
               general chatbot.
             </p>
@@ -350,7 +350,7 @@ export function VisualizeNote({
           ) : null}
 
           <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
-            <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-[#888]">
+            <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground">
               {sidebarCollapsed ? (
                 <button
                   onClick={onOpenSidebar}
@@ -361,7 +361,7 @@ export function VisualizeNote({
                 </button>
               ) : null}
               <DiagramFlowHorizontal size={13} />
-              <span className="truncate font-medium text-[#ccc]">{title}</span>
+              <span className="truncate font-medium text-foreground">{title}</span>
             </div>
 
             <div
@@ -386,10 +386,10 @@ export function VisualizeNote({
                   >
                     <p
                       className={`text-[14px] leading-5 ${
-                        turn.role === "user" ? "text-[#aaa]" : "text-[#ddd]"
+                        turn.role === "user" ? "text-foreground/70" : "text-foreground"
                       }`}
                     >
-                      <span className="mr-1 text-[#555]">
+                      <span className="mr-1 text-muted-foreground">
                         {turn.role === "user" ? "You" : "Viz"}
                       </span>
                       <span className="whitespace-pre-wrap">{turn.content}</span>
@@ -398,35 +398,35 @@ export function VisualizeNote({
                       <div className="space-y-3">
                         <VisualizeDiagramView diagram={turn.diagram} />
                         {turn.explanation ? (
-                          <p className="text-[15px] leading-6 text-[#bbb]">
+                          <p className="text-[15px] leading-6 text-foreground/80">
                             {turn.explanation}
                           </p>
                         ) : null}
                         {turn.formula ? (
-                          <div className="rounded-lg border border-[#222] bg-[#0c0c0c] px-3 py-2">
-                            <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
+                          <div className="rounded-lg border border-border bg-card px-3 py-2">
+                            <p className="mb-1 text-[12px] uppercase tracking-wide text-muted-foreground">
                               Formula
                             </p>
-                            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[14px] leading-5 text-[#e8e8e8]">
+                            <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-[14px] leading-5 text-foreground">
                               {turn.formula}
                             </pre>
                           </div>
                         ) : null}
                         {turn.sampleInput || turn.sampleOutput ? (
-                          <div className="grid gap-2 rounded-lg border border-[#222] bg-[#0c0c0c] p-3 text-[13px] leading-5 sm:grid-cols-2">
+                          <div className="grid gap-2 rounded-lg border border-border bg-card p-3 text-[13px] leading-5 sm:grid-cols-2">
                             <div className="min-w-0">
-                              <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
+                              <p className="mb-1 text-[12px] uppercase tracking-wide text-muted-foreground">
                                 Sample input
                               </p>
-                              <p className="break-all whitespace-pre-wrap text-[#ccc]">
+                              <p className="break-all whitespace-pre-wrap text-foreground/85">
                                 {turn.sampleInput || "—"}
                               </p>
                             </div>
                             <div className="min-w-0">
-                              <p className="mb-1 text-[12px] uppercase tracking-wide text-[#666]">
+                              <p className="mb-1 text-[12px] uppercase tracking-wide text-muted-foreground">
                                 Sample output
                               </p>
-                              <p className="break-all whitespace-pre-wrap text-[#ccc]">
+                              <p className="break-all whitespace-pre-wrap text-foreground/85">
                                 {turn.sampleOutput || "—"}
                               </p>
                             </div>
@@ -445,21 +445,21 @@ export function VisualizeNote({
                   {(streamReply || streamExplanation) && (
                     <div className="space-y-2">
                       {streamReply ? (
-                        <p className="text-[14px] leading-5 text-[#ddd]">
-                          <span className="mr-1 text-[#555]">Viz</span>
+                        <p className="text-[14px] leading-5 text-foreground">
+                          <span className="mr-1 text-muted-foreground">Viz</span>
                           <span className="whitespace-pre-wrap">
                             {streamReply}
                           </span>
                         </p>
                       ) : null}
                       {streamExplanation ? (
-                        <p className="whitespace-pre-wrap text-[15px] leading-6 text-[#bbb]">
+                        <p className="whitespace-pre-wrap text-[15px] leading-6 text-foreground/80">
                           {streamExplanation}
                         </p>
                       ) : null}
                     </div>
                   )}
-                  <div className="flex h-[200px] items-center justify-center rounded-lg border border-[#222] bg-[#0a0a0a] text-[14px] text-[#666]">
+                  <div className="flex h-[200px] items-center justify-center rounded-lg border border-border bg-card text-[14px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5">
                       <LoaderCircle size={12} className="animate-spin" />
                       {streamReply || streamExplanation
@@ -527,16 +527,16 @@ function VisualizeBlockRail({
                 onFocus={() => setHovered(index)}
                 onBlur={() => setHovered(null)}
                 className={`h-[3px] w-4 shrink-0 rounded-full transition-colors ${
-                  active ? "bg-[#e8e8e8]" : "bg-[#3a3a3a] hover:bg-[#888]"
+                  active ? "bg-foreground" : "bg-foreground/25 hover:bg-foreground/50"
                 }`}
               />
               {showTip ? (
-                <div className="pointer-events-none absolute left-6 z-20 w-64 rounded-xl border border-[#333] bg-[#1a1a1a] px-3 py-2.5 shadow-xl">
-                  <p className="text-[13px] font-medium leading-4 text-[#eee]">
+                <div className="pointer-events-none absolute left-6 z-20 w-64 rounded-xl border border-border bg-popover px-3 py-2.5 shadow-xl">
+                  <p className="text-[13px] font-medium leading-4 text-popover-foreground">
                     {truncateLabel(block.title, 64)}
                   </p>
                   {block.detail ? (
-                    <p className="mt-1.5 text-[12px] leading-4 text-[#888]">
+                    <p className="mt-1.5 text-[12px] leading-4 text-muted-foreground">
                       {truncateLabel(block.detail, 140)}
                     </p>
                   ) : null}
@@ -566,7 +566,7 @@ function PromptBox({
   placeholder: string;
 }) {
   return (
-    <div className="w-full rounded-2xl border border-[#2a2a2a] bg-[#141414] p-3 shadow-2xl">
+    <div className="w-full rounded-2xl border border-border bg-card p-3 shadow-lg">
       <textarea
         ref={inputRef}
         value={draft}
@@ -580,10 +580,10 @@ function PromptBox({
         rows={3}
         disabled={busy}
         placeholder={placeholder}
-        className="w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-5 text-[#eee] outline-none placeholder:text-[#555] disabled:opacity-60"
+        className="w-full resize-none bg-transparent px-1 py-1 text-[15px] leading-5 text-foreground outline-none placeholder:text-muted-foreground/70 disabled:opacity-60"
       />
       <div className="mt-2 flex items-center justify-between px-0.5">
-        <span className="inline-flex items-center gap-1 text-[12px] text-[#555]">
+        <span className="inline-flex items-center gap-1 text-[12px] text-muted-foreground">
           <Sparkles size={11} />
           Visualize only
         </span>
@@ -591,7 +591,7 @@ function PromptBox({
           type="button"
           disabled={!draft.trim() || busy}
           onClick={onSend}
-          className="rounded-full bg-white px-3 py-1 text-[13px] font-medium text-black disabled:opacity-30"
+          className="rounded-full bg-foreground px-3 py-1 text-[13px] font-medium text-background disabled:opacity-30"
         >
           {busy ? "…" : "Send"}
         </button>
@@ -617,7 +617,7 @@ function VisualizeNoteSkeleton({
       aria-label="Loading visualize note"
     >
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col px-4 pb-4 pt-5 sm:px-6 sm:pt-6">
-        <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-[#888]">
+        <div className="mb-4 flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground">
           {sidebarCollapsed ? (
             <button
               onClick={onOpenSidebar}
@@ -639,7 +639,7 @@ function VisualizeNoteSkeleton({
             </div>
 
             <div className="space-y-3">
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-[#222] bg-[#0a0a0a] px-4 py-6">
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-6">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <div
                     key={`node-${i}`}
@@ -657,13 +657,13 @@ function VisualizeNoteSkeleton({
                 <Skeleton className="h-3.5 w-[85%]" />
               </div>
 
-              <div className="rounded-lg border border-[#222] bg-[#0c0c0c] px-3 py-2">
+              <div className="rounded-lg border border-border bg-card px-3 py-2">
                 <Skeleton className="mb-2 h-3 w-14" />
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="mt-2 h-4 w-[80%]" />
               </div>
 
-              <div className="grid gap-2 rounded-lg border border-[#222] bg-[#0c0c0c] p-3 sm:grid-cols-2">
+              <div className="grid gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-2">
                 <div className="min-w-0">
                   <Skeleton className="mb-2 h-3 w-20" />
                   <Skeleton className="h-3.5 w-full" />

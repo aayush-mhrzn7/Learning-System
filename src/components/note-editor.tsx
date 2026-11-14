@@ -1381,8 +1381,8 @@ export function NoteEditor({
                         onClick={() => void toggleChecklist(item)}
                         className={`mt-1 grid h-4 w-4 shrink-0 place-items-center border ${
                           item.ticked
-                            ? "border-foreground bg-foreground text-background"
-                            : "border-border"
+                            ? "border-theme-accent bg-theme-accent text-white"
+                            : "border-foreground/35 hover:border-theme-accent"
                         }`}
                         aria-label={
                           item.ticked ? "Mark incomplete" : "Complete"
