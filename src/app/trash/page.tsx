@@ -4,6 +4,7 @@ import { ChevronLeft, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { trashToasts } from "@/lib/toast-messages";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -65,7 +66,7 @@ export default function TrashPage() {
     if (pendingId || emptying || restoringAll) return;
     const previous = batches;
     setPendingId(batchId);
-    const toastId = toast.loading("Restoring…");
+    const toastId = toast.loading(trashToasts.restoring);
     setBatches((current) =>
       current.filter((batch) => batch.batchId !== batchId),
     );
@@ -73,10 +74,10 @@ export default function TrashPage() {
       const response = await fetch(`/api/trash/${batchId}`, { method: "POST" });
       if (!response.ok) {
         setBatches(previous);
-        toast.error("Could not restore item", { id: toastId });
+        toast.error(trashToasts.restoreFailed, { id: toastId });
         return;
       }
-      toast.success("Restored", { id: toastId });
+      toast.success(trashToasts.restored, { id: toastId });
     } finally {
       setPendingId(null);
     }
@@ -87,16 +88,16 @@ export default function TrashPage() {
     const previous = batches;
     setRestoringAll(true);
     setConfirmAction(null);
-    const toastId = toast.loading("Restoring…");
+    const toastId = toast.loading(trashToasts.restoringAll);
     setBatches([]);
     try {
       const response = await fetch("/api/trash", { method: "POST" });
       if (!response.ok) {
         setBatches(previous);
-        toast.error("Could not restore Trash", { id: toastId });
+        toast.error(trashToasts.restoreAllFailed, { id: toastId });
         return;
       }
-      toast.success("Restored all", { id: toastId });
+      toast.success(trashToasts.restoredAll, { id: toastId });
     } finally {
       setRestoringAll(false);
     }
@@ -107,7 +108,7 @@ export default function TrashPage() {
     const previous = batches;
     setPendingId(batch.batchId);
     setConfirmAction(null);
-    const toastId = toast.loading("Deleting…");
+    const toastId = toast.loading(trashToasts.deleting);
     setBatches((current) =>
       current.filter((item) => item.batchId !== batch.batchId),
     );
@@ -117,10 +118,10 @@ export default function TrashPage() {
       });
       if (!response.ok) {
         setBatches(previous);
-        toast.error("Could not permanently delete item", { id: toastId });
+        toast.error(trashToasts.deleteFailed, { id: toastId });
         return;
       }
-      toast.success("Permanently deleted", { id: toastId });
+      toast.success(trashToasts.deleted, { id: toastId });
     } finally {
       setPendingId(null);
     }
@@ -131,16 +132,16 @@ export default function TrashPage() {
     const previous = batches;
     setEmptying(true);
     setConfirmAction(null);
-    const toastId = toast.loading("Emptying…");
+    const toastId = toast.loading(trashToasts.emptying);
     setBatches([]);
     try {
       const response = await fetch("/api/trash", { method: "DELETE" });
       if (!response.ok) {
         setBatches(previous);
-        toast.error("Could not empty Trash", { id: toastId });
+        toast.error(trashToasts.emptyFailed, { id: toastId });
         return;
       }
-      toast.success("Trash emptied", { id: toastId });
+      toast.success(trashToasts.emptied, { id: toastId });
     } finally {
       setEmptying(false);
     }

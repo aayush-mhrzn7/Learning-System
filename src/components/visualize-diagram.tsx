@@ -4,6 +4,7 @@ import { select } from "d3";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { aiToasts } from "@/lib/toast-messages";
 import type { VisualizeDiagram } from "@/db/schema";
 
 type LayoutNode = {
@@ -30,11 +31,9 @@ const COL_GAP = 28;
 const MIN_NODE_W = 72;
 
 function estimateWidth(label: string) {
-  // ~6.6px per char at 11px — good enough without measuring first.
   return Math.max(MIN_NODE_W, Math.min(280, label.length * 6.6 + 28));
 }
 
-/** Longest-path ranks from sources → sinks (top to bottom). */
 function assignRanks(
   nodeIds: string[],
   edges: { source: string; target: string }[],
@@ -49,13 +48,12 @@ function assignRanks(
   for (const edge of edges) {
     if (!ids.has(edge.source) || !ids.has(edge.target)) continue;
     if (edge.source === edge.target) continue;
-    outgoing.get(edge.source)!.push(edge.target);
+    outgoing.get(edge.source)?.push(edge.target);
     indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
   }
 
   const rank = new Map<string, number>();
   const queue = nodeIds.filter((id) => (indegree.get(id) ?? 0) === 0);
-  // Cycles / no roots: fall back to declaration order as a single column.
   if (queue.length === 0) {
     nodeIds.forEach((id, index) => rank.set(id, index));
     return rank;
@@ -75,7 +73,6 @@ function assignRanks(
     }
   }
 
-  // Any leftover (cycle): park after max rank in input order.
   let max = 0;
   for (const value of rank.values()) max = Math.max(max, value);
   for (const id of nodeIds) {
@@ -119,7 +116,7 @@ function layoutDiagram(diagram: VisualizeDiagram, width: number) {
   const rankKeys = [...byRank.keys()].sort((a, b) => a - b);
   let maxRowWidth = 0;
   for (const key of rankKeys) {
-    const row = byRank.get(key)!;
+    const row = byRank.get(key) ?? [];
     const rowWidth =
       row.reduce((sum, n) => sum + n.width, 0) +
       Math.max(0, row.length - 1) * COL_GAP;
@@ -130,7 +127,7 @@ function layoutDiagram(diagram: VisualizeDiagram, width: number) {
   const nodes: LayoutNode[] = [];
 
   for (const key of rankKeys) {
-    const row = byRank.get(key)!;
+    const row = byRank.get(key) ?? [];
     const rowWidth =
       row.reduce((sum, n) => sum + n.width, 0) +
       Math.max(0, row.length - 1) * COL_GAP;
@@ -180,8 +177,6 @@ async function svgToPngBlob(svgEl: SVGSVGElement): Promise<Blob> {
     clone.setAttribute("viewBox", `0 0 ${width} ${height}`);
   }
 
-  // The serialized SVG is rendered standalone, so CSS variables and Tailwind
-  // classes do not resolve — inline the computed colors and paint the background.
   const bgColor = getComputedStyle(svgEl).backgroundColor;
   const sources = svgEl.querySelectorAll("*");
   const copies = clone.querySelectorAll("*");
@@ -339,10 +334,10 @@ export function VisualizeDiagramView({
         new ClipboardItem({ "image/png": blob }),
       ]);
       setCopied(true);
-      toast.success("Diagram copied — paste into a writing note");
+      toast.success(aiToasts.diagramCopied);
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      toast.error("Could not copy diagram");
+      toast.error(aiToasts.diagramCopyFailed);
     }
   }
 

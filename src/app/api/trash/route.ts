@@ -4,7 +4,7 @@ import { requireUserId } from "@/lib/auth";
 
 export async function GET() {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const result = await db.execute<{
     batchId: string;
@@ -68,7 +68,7 @@ export async function GET() {
 
 export async function POST() {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   await db.execute(sql`
     WITH restored_directories AS (
@@ -87,7 +87,7 @@ export async function POST() {
 
 export async function DELETE() {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   await db.execute(sql`
     WITH deleted_notes AS (

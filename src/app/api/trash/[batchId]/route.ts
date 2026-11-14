@@ -7,7 +7,7 @@ type Context = { params: Promise<{ batchId: string }> };
 
 export async function POST(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { batchId } = await context.params;
   if (!idSchema.safeParse(batchId).success) {
@@ -60,7 +60,7 @@ export async function POST(_request: Request, context: Context) {
 
 export async function DELETE(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { batchId } = await context.params;
   if (!idSchema.safeParse(batchId).success) {

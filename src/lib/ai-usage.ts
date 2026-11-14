@@ -29,10 +29,6 @@ type RecordAiUsageInput = {
   error?: string | null;
 };
 
-/**
- * shortcut: approximate list prices — refresh when OpenAI/OpenRouter changes them.
- * Units: USD per 1M tokens. Web search: USD per billable request.
- */
 const PRICE_PER_MTOK: Record<string, { input: number; output: number }> = {
   "gpt-5-nano": { input: 0.05, output: 0.4 },
   "gpt-6-luna": { input: 0.15, output: 0.6 },
@@ -56,7 +52,6 @@ function estimateCostUsd(args: {
   return tokens + search;
 }
 
-/** Fire-and-forget safe: never throw into the LLM path. */
 export async function recordAiUsage(input: RecordAiUsageInput) {
   const inputTokens = input.inputTokens ?? 0;
   const outputTokens = input.outputTokens ?? 0;

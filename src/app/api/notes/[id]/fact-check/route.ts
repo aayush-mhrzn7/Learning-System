@@ -17,12 +17,11 @@ import { idSchema } from "@/lib/schemas";
 
 type Context = { params: Promise<{ id: string }> };
 
-/** Free OpenRouter + web search: keep this low to avoid timeouts/rate limits. */
 const JUDGE_CONCURRENCY = 2;
 
 export async function POST(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
@@ -141,9 +140,6 @@ export async function POST(_request: Request, context: Context) {
           }
         });
 
-        // Swap only after judges finish — keep prior claims if the run aborts early.
-        // neon-http has no multi-statement txn; insert-then-delete-old is the safe order.
-        // shortcut: rare crash between insert and delete can leave old+new until next run
         if (ready.length > 0) {
           const newIds = ready.map((claim) => claim.id);
           await db.insert(claims).values(ready);

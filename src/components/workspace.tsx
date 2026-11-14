@@ -13,6 +13,7 @@ import {
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { workspaceToasts } from "@/lib/toast-messages";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,7 +71,6 @@ export function Workspace() {
   const [tree, setTree] = useState<TreePayload>(emptyTree);
   const treeRef = useRef<TreePayload>(emptyTree);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  // Closed by default (esp. mobile). Desktop preference restored after mount.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -104,8 +104,9 @@ export function Workspace() {
           preferredNoteId ||
           current ||
           localStorage.getItem("learning-last-note");
-        const next = data.notes.some((note) => note.id === preferred)
-          ? preferred!
+        const next =
+          preferred && data.notes.some((note) => note.id === preferred)
+          ? preferred
           : (data.notes[0]?.id ?? null);
         if (next) localStorage.setItem("learning-last-note", next);
         else localStorage.removeItem("learning-last-note");
@@ -234,7 +235,7 @@ export function Workspace() {
       });
       if (!response.ok) {
         applyOptimisticTree(() => previous);
-        toast.error("Could not create directory");
+        toast.error(workspaceToasts.createDirectoryFailed);
         return;
       }
       setFirstDirectoryOpen(false);
@@ -242,7 +243,7 @@ export function Workspace() {
       setFirstDirectoryName("");
     } catch {
       applyOptimisticTree(() => previous);
-      toast.error("Could not create directory");
+      toast.error(workspaceToasts.createDirectoryFailed);
     } finally {
       setCreatingDirectory(false);
     }

@@ -3,8 +3,8 @@ import { requireUserId } from "@/lib/auth";
 import { db } from "@/db";
 
 export async function GET() {
-  const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  const { error } = await requireUserId();
+  if (error) return error;
 
   try {
     const result = await db.execute<{ now: string }>(sql`select now() as now`);

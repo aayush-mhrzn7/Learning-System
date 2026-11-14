@@ -3,7 +3,7 @@ import { requireUserId } from "@/lib/auth";
 
 export async function GET() {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const statuses = await getProviderConnectionStatuses(userId);
   return Response.json({ statuses });

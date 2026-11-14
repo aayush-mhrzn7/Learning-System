@@ -12,11 +12,8 @@ import {
 const EXTRACT_CHUNK_CHARS = 2800;
 const DECISION_BATCH_SIZE = 40;
 
-/** Only claims with P(likely wrong) above this get a paid web fact-check. */
 const CLAIM_WEB_CHECK_THRESHOLD = 0.7;
-/** Hard cap after extract — Decisions never sees a 50-claim firehose. */
 const MAX_EXTRACTED_CLAIMS = 8;
-/** Hard cap on paid web judges per run (highest suspicion first). */
 export const MAX_WEB_JUDGES = 5;
 
 const extractedClaimsSchema = z.object({
@@ -77,7 +74,6 @@ function createClient(credentials: ResolvedProviderCredentials) {
   return new OpenAI({
     apiKey: credentials.apiKey,
     baseURL: credentials.baseUrl,
-    // Free OpenRouter models + web search regularly exceed the default wait.
     timeout: 180_000,
     maxRetries: 1,
     defaultHeaders:
@@ -90,15 +86,12 @@ function createClient(credentials: ResolvedProviderCredentials) {
   });
 }
 
-/** OpenAI native search vs OpenRouter server tool (works with free :free models). */
 function webSearchTools(credentials: ResolvedProviderCredentials) {
   if (credentials.provider === "openrouter") {
-    // OpenRouter extension — not in the OpenAI SDK tool union.
     return [
       {
         type: "openrouter:web_search",
         parameters: {
-          // Parallel turbo is the cheapest OpenRouter search engine (~$0.001/call).
           engine: "parallel",
           mode: "turbo",
           max_results: 5,
@@ -179,7 +172,6 @@ function parseJsonObject(raw: string): unknown {
       try {
         return JSON.parse(fenced[1].trim());
       } catch {
-        // fall through
       }
     }
     const start = raw.indexOf("{");
@@ -191,7 +183,6 @@ function parseJsonObject(raw: string): unknown {
   }
 }
 
-/** Split long notes so free/reasoning models don't hang on one giant extract call. */
 function chunkNoteText(text: string, maxChars = EXTRACT_CHUNK_CHARS): string[] {
   const trimmed = text.trim();
   if (!trimmed) return [];
@@ -235,7 +226,7 @@ export async function mapPool<T, R>(
       const index = next;
       next += 1;
       if (index >= items.length) return;
-      results[index] = await worker(items[index]!, index);
+      results[index] = await worker(items[index] as T, index);
     }
   }
 
@@ -248,8 +239,6 @@ function responseExtras(
   credentials: ResolvedProviderCredentials,
   webSearch: boolean,
 ) {
-  // gpt-5-nano burns a tiny max_output_tokens budget entirely on reasoning and
-  // returns an empty message ("no structured output"). Keep headroom + low effort.
   if (credentials.provider === "gpt") {
     return {
       max_output_tokens: webSearch ? 12_000 : 16_000,
@@ -330,8 +319,6 @@ async function structuredResponse<T>(
     try {
       return parseJsonObject(raw) as T;
     } catch (error) {
-      // Free OpenRouter models often ignore json_schema when tools run.
-      // Reformat the prose answer (and search URLs) into JSON without another search.
       if (!webSearch || credentials.provider !== "openrouter") {
         throw error;
       }
@@ -424,7 +411,6 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Index of claim text in the note, allowing flexible whitespace. */
 function findClaimOffset(noteText: string, claimText: string): number {
   const needle = claimText.trim();
   if (!needle) return -1;
@@ -436,7 +422,6 @@ function findClaimOffset(noteText: string, claimText: string): number {
   return match?.index ?? -1;
 }
 
-/** ±paragraph window around a claim so the judge can interpret it in-note. */
 export function localClaimContext(
   noteText: string,
   claimText: string,
@@ -500,14 +485,9 @@ export async function extractClaims(
 }
 
 export function shouldWebCheckClaim(score: number) {
-  // score = P(likely factually wrong). Web-search only high-suspicion claims.
   return score > CLAIM_WEB_CHECK_THRESHOLD;
 }
 
-/**
- * OpenAI Decisions API (`gpt-6-luna`).
- * Ask "is this claim likely WRONG?" — only high scores burn a paid web judge.
- */
 export async function decideClaims(
   credentials: ResolvedProviderCredentials,
   claims: { text: string }[],
@@ -685,7 +665,6 @@ export async function judgeClaim(
     true,
   );
   const verdict = verdictSchema.parse(data);
-  // No red underline without evidence.
   if (verdict.verdict === "incorrect" && verdict.sources.length === 0) {
     return {
       ...verdict,
@@ -719,7 +698,6 @@ const visualizeTurnSchema = z.object({
         .array(
           z.object({
             id: z.string().min(1).max(40),
-            // Soft-cap in finalize — keep Zod permissive so long model labels don't fail the turn.
             label: z.string().min(1).max(200),
           }),
         )
@@ -901,21 +879,20 @@ function finalizeVisualizeTurn(data: unknown): VisualizeTurnResult {
   };
 }
 
-/** Peek a (possibly partial) JSON string field while the model streams. */
 function peekJsonString(raw: string, key: string): string | undefined {
   const marker = `"${key}"`;
   const keyIdx = raw.indexOf(marker);
   if (keyIdx < 0) return undefined;
   let i = keyIdx + marker.length;
-  while (i < raw.length && /\s|:/.test(raw[i]!)) i += 1;
+  while (i < raw.length && /\s|:/.test(raw.charAt(i))) i += 1;
   if (raw[i] !== '"') return undefined;
   i += 1;
   let out = "";
   while (i < raw.length) {
-    const ch = raw[i]!;
+    const ch = raw.charAt(i);
     if (ch === "\\") {
       if (i + 1 >= raw.length) return out;
-      const next = raw[i + 1]!;
+      const next = raw.charAt(i + 1);
       const escaped: Record<string, string> = {
         n: "\n",
         t: "\t",
@@ -940,7 +917,6 @@ type VisualizeStreamEvent =
   | { type: "done"; turn: VisualizeTurnResult }
   | { type: "error"; error: string };
 
-/** Stream visualize JSON; emit reply/explanation as they appear, then the final turn. */
 export async function* streamVisualizeTurn(
   credentials: ResolvedProviderCredentials,
   args: {
@@ -1028,7 +1004,6 @@ export async function* streamVisualizeTurn(
   }
 }
 
-/** Tutor reply about a selected passage — no web search, no note rewrites. */
 export async function answerInlineSelection(
   credentials: ResolvedProviderCredentials,
   args: {
@@ -1122,7 +1097,6 @@ export async function findMissingTopics(
       "Do not repeat anything already covered in the note.",
       "When the note is already conceptually sufficient, return an empty gaps list.",
     ].join(" "),
-    // Gaps only needs the head of long notes.
     noteText.length > 8000 ? noteText.slice(0, 8000) : noteText,
   );
   return gapsSchema.parse(data);

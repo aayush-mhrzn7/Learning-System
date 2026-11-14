@@ -6,7 +6,7 @@ import { directoryCreateSchema } from "@/lib/schemas";
 
 export async function POST(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const parsed = directoryCreateSchema.safeParse(
     await request.json().catch(() => null),

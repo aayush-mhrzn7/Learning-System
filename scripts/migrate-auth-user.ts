@@ -1,10 +1,3 @@
-/**
- * One-shot: add users + user_id columns, create the owner account,
- * attach all existing directories/notes to that user.
- *
- * Usage:
- *   MIGRATE_EMAIL=you@example.com MIGRATE_PASSWORD='…' bun run scripts/migrate-auth-user.ts
- */
 import { neon } from "@neondatabase/serverless";
 import { hashPassword } from "../src/lib/password";
 
@@ -52,7 +45,9 @@ if (existing[0]?.id) {
     VALUES (${email}, ${passwordHash})
     RETURNING id
   `;
-  userId = created[0]!.id as string;
+  const createdRow = created[0];
+  if (!createdRow) throw new Error("Failed to create user");
+  userId = createdRow.id as string;
   console.log("Created user", email);
 }
 

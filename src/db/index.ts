@@ -4,11 +4,8 @@ import dns from "node:dns";
 import { Agent, fetch as undiciFetch } from "undici";
 import * as schema from "./schema";
 
-// Node undici's Happy Eyeballs stalls on unreachable IPv6 here (ETIMEDOUT /
-// ENETUNREACH). Force IPv4 for Neon HTTP. Bun is fine without this.
 dns.setDefaultResultOrder("ipv4first");
 const ipv4Agent = new Agent({ connect: { family: 4 } });
-// neon types this as `any`; undici/DOM RequestInit disagree on body/dispatcher.
 neonConfig.fetchFunction = (url: string, init?: object) =>
   undiciFetch(url, { ...(init ?? {}), dispatcher: ipv4Agent } as Parameters<
     typeof undiciFetch
@@ -27,9 +24,7 @@ function createDb() {
   return drizzle(sql, { schema });
 }
 
-const globalForDb = globalThis as unknown as {
-  drizzle?: Db;
-};
+const globalForDb = globalThis as { drizzle?: Db };
 
 function getDb(): Db {
   if (!globalForDb.drizzle) {

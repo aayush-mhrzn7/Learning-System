@@ -1,7 +1,6 @@
 const COLOR_SCHEME_KEY = "learning-color-scheme";
 export const COLOR_SCHEME_CHANGED_EVENT = "learning-color-scheme-changed";
 
-/** @deprecated migrated into light/dark keys */
 const APP_THEME_KEY = "learning-app-theme";
 const APP_THEME_LIGHT_KEY = "learning-app-theme-light";
 const APP_THEME_DARK_KEY = "learning-app-theme-dark";
@@ -37,7 +36,6 @@ export const APP_THEME_LABELS: Record<AppThemeOption, string> = {
   iris: "Iris",
 };
 
-/** Preview swatches for the Appearance theme grid (light / dark). */
 export const APP_THEME_SWATCHES: Record<
   AppThemeOption,
   { light: string; dark: string }
@@ -147,7 +145,6 @@ export function writeAppThemeDark(value: AppThemeOption) {
   );
 }
 
-/** When true, color themes only tint accents — surfaces stay black & white. */
 export function readAccentOnly() {
   return readBool(ACCENT_ONLY_KEY, true);
 }
@@ -181,7 +178,6 @@ export function resolveColorScheme(
     : "light";
 }
 
-/** Apply scheme / theme / motion to <html>. Safe to call from boot script or React. */
 export function applyAppearance(options?: {
   scheme?: ColorSchemeOption;
   themeLight?: AppThemeOption;
@@ -209,5 +205,4 @@ export function applyAppearance(options?: {
   else delete root.dataset.reduceMotion;
 }
 
-/** Inline boot snippet — keep in sync with applyAppearance keys/defaults. */
 export const APPEARANCE_BOOT_SCRIPT = `(function(){try{var s=localStorage.getItem("learning-color-scheme")||"dark";var legacy=localStorage.getItem("learning-app-theme");var fallback=legacy||"classic";var tl=localStorage.getItem("learning-app-theme-light")||fallback;var td=localStorage.getItem("learning-app-theme-dark")||fallback;var ao=localStorage.getItem("learning-accent-only");var accentOnly=ao===null?true:ao!=="false";var m=localStorage.getItem("learning-reduce-motion")==="true";var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.classList.toggle("accent-only",accentOnly);r.dataset.theme=d?td:tl;r.dataset.themeLight=tl;r.dataset.themeDark=td;r.dataset.colorScheme=s;r.setAttribute("data-accent-only",accentOnly?"true":"false");if(m)r.dataset.reduceMotion="true";else delete r.dataset.reduceMotion;}catch(e){var r=document.documentElement;r.classList.add("dark");r.classList.add("accent-only");r.dataset.theme="classic";r.setAttribute("data-accent-only","true");}})();`;

@@ -23,7 +23,6 @@ function contentOrigin(scroll: HTMLElement, content: HTMLElement) {
   );
 }
 
-/** Title + editor only — skips article bottom padding / gaps. */
 function measureWrittenHeight(content: HTMLElement): number {
   let bottom = 0;
   const title = content.querySelector("textarea, input");
@@ -65,19 +64,19 @@ export function EditorMinimap({
     const mirror = mirrorRef.current;
     if (!scroll || !content || !track || !mirror) return;
 
-    function paint() {
-      const written = measureWrittenHeight(content!);
-      const viewH = Math.max(scroll!.clientHeight, 1);
+    const paint = () => {
+      const written = measureWrittenHeight(content);
+      const viewH = Math.max(scroll.clientHeight, 1);
       const fill = Math.min(1, written / viewH);
       setMapFill(fill);
 
-      const contentW = Math.max(content!.clientWidth, 1);
-      const asideH = track!.parentElement?.clientHeight ?? viewH;
+      const contentW = Math.max(content.clientWidth, 1);
+      const asideH = track.parentElement?.clientHeight ?? viewH;
       const mapH = Math.max(Math.max(40, fill * asideH - 4) - 8, 1);
-      const mapW = Math.max(track!.clientWidth - 8, 1);
+      const mapW = Math.max(track.clientWidth - 8, 1);
 
-      mirror!.replaceChildren();
-      const title = content!.querySelector("textarea, input");
+      mirror.replaceChildren();
+      const title = content.querySelector("textarea, input");
       if (
         title instanceof HTMLTextAreaElement ||
         title instanceof HTMLInputElement
@@ -85,31 +84,31 @@ export function EditorMinimap({
         const el = document.createElement("div");
         el.className = title.className;
         el.textContent = title.value;
-        mirror!.append(el);
+        mirror.append(el);
       }
-      const editor = content!.querySelector(".learning-editor");
+      const editor = content.querySelector(".learning-editor");
       if (editor) {
         const clone = editor.cloneNode(true) as HTMLElement;
         clone.contentEditable = "false";
         clone.inert = true;
-        mirror!.append(clone);
+        mirror.append(clone);
       }
 
-      const pad = getComputedStyle(content!);
-      mirror!.style.boxSizing = "border-box";
-      mirror!.style.width = `${contentW}px`;
-      mirror!.style.height = `${written}px`;
-      mirror!.style.paddingTop = pad.paddingTop;
-      mirror!.style.paddingLeft = pad.paddingLeft;
-      mirror!.style.paddingRight = pad.paddingRight;
-      mirror!.style.paddingBottom = "0";
-      mirror!.style.transform = `scale(${mapW / contentW}, ${mapH / written})`;
+      const pad = getComputedStyle(content);
+      mirror.style.boxSizing = "border-box";
+      mirror.style.width = `${contentW}px`;
+      mirror.style.height = `${written}px`;
+      mirror.style.paddingTop = pad.paddingTop;
+      mirror.style.paddingLeft = pad.paddingLeft;
+      mirror.style.paddingRight = pad.paddingRight;
+      mirror.style.paddingBottom = "0";
+      mirror.style.transform = `scale(${mapW / contentW}, ${mapH / written})`;
 
       const next: ClaimMark[] = [];
-      content!.querySelectorAll<HTMLElement>("[data-claim-id]").forEach((node) => {
+      content.querySelectorAll<HTMLElement>("[data-claim-id]").forEach((node) => {
         const id = node.dataset.claimId;
         if (!id) return;
-        const { top, height } = offsetInContent(node, content!);
+        const { top, height } = offsetInContent(node, content);
         next.push({
           id,
           top: top / written,
@@ -118,21 +117,21 @@ export function EditorMinimap({
       });
       setClaims(next);
 
-      const origin = contentOrigin(scroll!, content!);
+      const origin = contentOrigin(scroll, content);
       setViewport({
-        top: Math.max(0, (scroll!.scrollTop - origin) / written),
+        top: Math.max(0, (scroll.scrollTop - origin) / written),
         height: Math.min(1, viewH / written),
       });
-    }
+    };
 
-    function onScroll() {
-      const written = measureWrittenHeight(content!);
-      const origin = contentOrigin(scroll!, content!);
+    const onScroll = () => {
+      const written = measureWrittenHeight(content);
+      const origin = contentOrigin(scroll, content);
       setViewport({
-        top: Math.max(0, (scroll!.scrollTop - origin) / written),
-        height: Math.min(1, scroll!.clientHeight / written),
+        top: Math.max(0, (scroll.scrollTop - origin) / written),
+        height: Math.min(1, scroll.clientHeight / written),
       });
-    }
+    };
 
     paint();
     scroll.addEventListener("scroll", onScroll, { passive: true });
@@ -175,7 +174,6 @@ export function EditorMinimap({
         }}
       >
         <div className="pointer-events-none absolute inset-1 overflow-hidden">
-          {/* shortcut: DOM clone on edit — switch to canvas if notes get huge */}
           <div
             ref={mirrorRef}
             aria-hidden

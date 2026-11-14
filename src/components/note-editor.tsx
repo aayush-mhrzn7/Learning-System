@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { noteToasts } from "@/lib/toast-messages";
 import {
   ActivityPipeline,
   createPipelineRun,
@@ -78,7 +79,7 @@ import { markdownTableToHtml } from "@/lib/markdown-table";
 import type {
   ChecklistItem,
   NotePayload,
-  NoteDetail,
+  NoteDetailResponse,
 } from "@/lib/types";
 
 const lowlight = createLowlight(common);
@@ -103,12 +104,12 @@ async function insertUploadedImage(
   form.append("file", file);
   const response = await fetch("/api/uploads", { method: "POST", body: form });
   if (!response.ok) {
-    toast.error("Image upload failed");
+    toast.error(noteToasts.imageUploadFailed);
     return;
   }
   const data = (await response.json()) as { url?: string };
   if (!data.url) {
-    toast.error("Image upload failed");
+    toast.error(noteToasts.imageUploadFailed);
     return;
   }
   const node = imageType.create({ src: data.url });
@@ -182,7 +183,6 @@ export function NoteEditor({
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsMessage, setGapsMessage] = useState("");
   const [loadError, setLoadError] = useState(false);
-  // Default reading mode (mobile-first); desktop flips to edit after mount.
   const [readOnly, setReadOnly] = useState(true);
   const [hovered, setHovered] = useState<{
     claim: ClaimFlag;
@@ -199,8 +199,6 @@ export function NoteEditor({
   const claimsRef = useRef<ClaimFlag[]>([]);
   const pipelineStepRef = useRef("save");
   const pipelineGenRef = useRef(0);
-  // Block autosave until the note for noteId is loaded into the editor.
-  // Otherwise an empty initial doc (or a stale prior note) can overwrite Neon.
   const loadingContent = useRef(true);
   const hydratedNoteId = useRef<string | null>(null);
   const saveNowRef = useRef<() => Promise<boolean>>(async () => false);
@@ -387,7 +385,6 @@ export function NoteEditor({
 
         const plain = event.clipboardData?.getData("text/plain") ?? "";
         const clipboardHtml = event.clipboardData?.getData("text/html") ?? "";
-        // Real HTML tables already paste fine; convert GFM pipe tables only.
         if (!clipboardHtml.includes("<table") && view.state.schema.nodes.table) {
           const tableHtml = markdownTableToHtml(plain);
           if (tableHtml) {
@@ -450,7 +447,6 @@ export function NoteEditor({
   }, [editor, readOnly]);
 
   const saveNow = useCallback(async (): Promise<boolean> => {
-    // Editable gate lives at scheduleSave call sites; flush/pipeline must still PATCH.
     if (!editor || loadingContent.current) return false;
     const targetNoteId = noteIdRef.current;
     if (hydratedNoteId.current !== targetNoteId) return false;
@@ -469,7 +465,7 @@ export function NoteEditor({
       if (noteIdRef.current === targetNoteId) setSaveState("error");
       return false;
     }
-    const data = (await response.json()) as { note: NoteDetail };
+    const data = (await response.json()) as NoteDetailResponse;
     if (noteIdRef.current !== targetNoteId) return true;
     setPayload((current) =>
       current
@@ -491,7 +487,6 @@ export function NoteEditor({
     titleRef.current = data.note.title;
     onTitleChange(targetNoteId, data.note.title);
     setSaveState("saved");
-    // Title already synced via onTitleChange; skip full tree reload on autosave.
     return true;
   }, [editor, onTitleChange]);
 
@@ -545,7 +540,6 @@ export function NoteEditor({
         content: [{ type: "paragraph" }],
       });
       editor.view.dispatch(editor.state.tr.setMeta(claimFlagsKey, []));
-      // Fresh notes start empty locally — never GET-overwrite while the user types.
       hydratedNoteId.current = noteId;
       loadingContent.current = false;
       setSaveState("saved");
@@ -588,13 +582,11 @@ export function NoteEditor({
 
     return () => {
       cancelled = true;
-      // Flush pending edits for this note before hydration flags clear.
       void saveNowRef.current();
       loadingContent.current = true;
       hydratedNoteId.current = null;
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-    // shellTitle intentionally omitted — sidebar renames must not re-hydrate/wipe body.
   }, [editor, fresh, noteId]);
 
   function applyClaims(claims: ClaimFlag[]) {
@@ -654,7 +646,6 @@ export function NoteEditor({
     const run = createPipelineRun(kind, { skipFactCheck });
     pipelineStepRef.current = "save";
     setPipelineRun(run);
-    // Publish as-is should not flash the fact-check activity rail.
     if (!skipFactCheck) setPipelineOpen(true);
     setPipelineBusy(true);
     if (!skipFactCheck) applyClaims([]);
@@ -687,7 +678,7 @@ export function NoteEditor({
             kind === "re-publish" ? "Re-publish failed" : "Publish failed",
           );
         }
-        const { note } = (await response.json()) as { note: NoteDetail };
+        const { note } = (await response.json()) as NoteDetailResponse;
         if (gen !== pipelineGenRef.current) return;
         setPayload((current) => (current ? { ...current, note } : current));
         await onTreeChanged();
@@ -708,7 +699,9 @@ export function NoteEditor({
           );
         }
         toast.success(
-          kind === "re-publish" ? "Re-published as-is" : "Published as-is",
+          kind === "re-publish"
+            ? noteToasts.republishedAsIs
+            : noteToasts.publishedAsIs,
         );
         return;
       }
@@ -927,8 +920,6 @@ export function NoteEditor({
         throw new Error("Fact-check ended early");
       }
 
-      // Publish/re-publish with fact-check also analyzes what's missing.
-      // Publish as-is (skipFactCheck) never reaches here.
       if (kind !== "fact-check" && !factCheckIncomplete) {
         updateStep(gen, "gaps", {
           status: "running",
@@ -982,7 +973,7 @@ export function NoteEditor({
     } catch (error) {
       if (gen !== pipelineGenRef.current) return;
       const message =
-        error instanceof Error ? error.message : "Pipeline failed";
+        error instanceof Error ? error.message : noteToasts.pipelineFailed;
       const stepId = pipelineStepRef.current || "complete";
       failPipeline(gen, stepId, message);
       toast.error(message);
@@ -1020,7 +1011,7 @@ export function NoteEditor({
         method: "POST",
       });
       if (!response.ok) {
-        toast.error("Gap analysis failed");
+        toast.error(noteToasts.gapAnalysisFailed);
         return;
       }
       const data = (await response.json()) as {
@@ -1032,7 +1023,7 @@ export function NoteEditor({
       );
       setGapsMessage(data.message ?? "");
     } catch {
-      toast.error("Gap analysis failed");
+      toast.error(noteToasts.gapAnalysisFailed);
     } finally {
       setGapsLoading(false);
     }
@@ -1066,7 +1057,7 @@ export function NoteEditor({
             }
           : current,
       );
-      toast.error("Could not update gap item");
+      toast.error(noteToasts.gapUpdateFailed);
     }
   }
 
@@ -1088,7 +1079,7 @@ export function NoteEditor({
           ? { ...current, checklist: [...current.checklist, item] }
           : current,
       );
-      toast.error("Could not delete gap item");
+      toast.error(noteToasts.gapDeleteFailed);
     }
   }
 
@@ -1306,12 +1297,10 @@ export function NoteEditor({
                   setHovered({
                     claim,
                     x: Math.min(rect.left, window.innerWidth - 360),
-                    // Overlap the claim slightly so the pointer never crosses a dead gap.
                     y: rect.bottom - 4,
                   });
                   return;
                 }
-                // Grace period to reach the fixed tooltip (and its top hit pad).
                 hoverTimer.current = window.setTimeout(
                   () => setHovered(null),
                   400,

@@ -6,7 +6,6 @@ import type {
 
 export const emptyVisualize: VisualizeState = { messages: [] };
 
-/** Migrate older single-diagram payloads into per-message blocks. */
 export function normalizeVisualize(raw: unknown): VisualizeState {
   if (!raw || typeof raw !== "object") return emptyVisualize;
   const value = raw as {

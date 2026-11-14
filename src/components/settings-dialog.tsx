@@ -3,6 +3,7 @@
 import { Bot, Lock, Moon, PanelRight, Palette, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { providerToasts } from "@/lib/toast-messages";
 import {
   Dialog,
   DialogContent,
@@ -319,7 +320,6 @@ export function SettingsDialog({
 
   useEffect(() => {
     if (!open) return;
-    // Drop the old client-side BYOK store; keys live encrypted in Postgres now.
     localStorage.removeItem("learning-provider-settings");
     let cancelled = false;
     setLoading(true);
@@ -339,7 +339,7 @@ export function SettingsDialog({
         setApiKeyDraft("");
         void refreshStatuses();
       } catch {
-        if (!cancelled) toast.error("Could not load provider settings");
+        if (!cancelled) toast.error(providerToasts.loadFailed);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -358,7 +358,7 @@ export function SettingsDialog({
 
   async function saveProvider(options?: { makeActive?: boolean }) {
     if (!isEnabledProviderId(selected)) {
-      toast.error("OpenRouter is disabled for now");
+      toast.error(providerToasts.openRouterDisabled);
       return;
     }
     setSaving(true);
@@ -376,15 +376,15 @@ export function SettingsDialog({
       });
       const data = (await response.json()) as SettingsState & { error?: string };
       if (!response.ok) {
-        toast.error(data.error ?? "Could not save provider");
+        toast.error(data.error ?? providerToasts.saveFailed);
         return;
       }
       setSettings(data);
       setApiKeyDraft("");
-      toast.success("Provider saved");
+      toast.success(providerToasts.saved);
       void refreshStatuses();
     } catch {
-      toast.error("Could not save provider");
+      toast.error(providerToasts.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -392,12 +392,12 @@ export function SettingsDialog({
 
   async function enableOnly(id: ProviderId) {
     if (!isEnabledProviderId(id)) {
-      toast.error("OpenRouter is disabled for now");
+      toast.error(providerToasts.openRouterDisabled);
       return;
     }
     if (!settings.providers[id].apiKeyConfigured) {
       setSelected(id);
-      toast.error("Save an API key for this provider first");
+      toast.error(providerToasts.needKey);
       return;
     }
     setSaving(true);
@@ -409,14 +409,14 @@ export function SettingsDialog({
       });
       const data = (await response.json()) as SettingsState & { error?: string };
       if (!response.ok) {
-        toast.error(data.error ?? "Could not switch provider");
+        toast.error(data.error ?? providerToasts.switchFailed);
         return;
       }
       setSettings(data);
       setSelected(id);
       void refreshStatuses();
     } catch {
-      toast.error("Could not switch provider");
+      toast.error(providerToasts.switchFailed);
     } finally {
       setSaving(false);
     }

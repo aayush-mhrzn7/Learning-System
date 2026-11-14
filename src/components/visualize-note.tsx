@@ -8,10 +8,11 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { aiToasts } from "@/lib/toast-messages";
 import { VisualizeDiagramView } from "@/components/visualize-diagram";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { VisualizeState } from "@/db/schema";
-import type { NoteDetail } from "@/lib/types";
+import type { NoteDetailResponse } from "@/lib/types";
 import { emptyVisualize, normalizeVisualize } from "@/lib/visualize";
 
 export function VisualizeNote({
@@ -69,10 +70,10 @@ export function VisualizeNote({
           signal: ac.signal,
         });
         if (!response.ok) {
-          toast.error("Could not load visualize note");
+          toast.error(aiToasts.visualizeLoadFailed);
           return;
         }
-        const data = (await response.json()) as { note: NoteDetail };
+        const data = (await response.json()) as NoteDetailResponse;
         if (ac.signal.aborted) return;
         const next = normalizeVisualize(data.note.visualize);
         setTitle(data.note.title);
@@ -81,13 +82,12 @@ export function VisualizeNote({
         setLoaded(true);
       } catch {
         if (ac.signal.aborted) return;
-        toast.error("Could not load visualize note");
+        toast.error(aiToasts.visualizeLoadFailed);
       }
     })();
     return () => {
       ac.abort();
     };
-    // shellTitle omitted — sidebar renames must not remount visualize state.
   }, [fresh, noteId]);
 
   useEffect(() => {
@@ -202,7 +202,7 @@ export function VisualizeNote({
         const fail = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        throw new Error(fail?.error || "Visualize request failed");
+        throw new Error(fail?.error || aiToasts.visualizeFailed);
       }
 
       const reader = response.body.getReader();
@@ -235,7 +235,7 @@ export function VisualizeNote({
             continue;
           }
           if (event.type === "error") {
-            throw new Error(event.error || "Visualize request failed");
+            throw new Error(event.error || aiToasts.visualizeFailed);
           }
           if (event.type === "done" && event.note) {
             sawDone = true;
@@ -258,12 +258,11 @@ export function VisualizeNote({
       if (!mountedRef.current || (error instanceof DOMException && error.name === "AbortError")) {
         return;
       }
-      // Stream may have persisted on the server — prefer refetch over blind rollback.
       let recovered = false;
       try {
         const response = await fetch(`/api/notes/${noteId}`);
         if (response.ok) {
-          const data = (await response.json()) as { note: NoteDetail };
+          const data = (await response.json()) as NoteDetailResponse;
           if (mountedRef.current) {
             const next = normalizeVisualize(data.note.visualize);
             setVisualize(next);
@@ -274,7 +273,6 @@ export function VisualizeNote({
           }
         }
       } catch {
-        // fall through to rollback
       }
       if (!recovered && mountedRef.current) {
         setVisualize(previous);
@@ -285,7 +283,7 @@ export function VisualizeNote({
         setStreamReply("");
         setStreamExplanation("");
         toast.error(
-          error instanceof Error ? error.message : "Visualize request failed",
+          error instanceof Error ? error.message : aiToasts.visualizeFailed,
         );
       }
     } finally {

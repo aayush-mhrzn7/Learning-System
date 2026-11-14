@@ -7,7 +7,7 @@ export async function GET(
   context: { params: Promise<{ key: string[] }> },
 ) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { key: parts } = await context.params;
   const key = parts.map((part) => decodeURIComponent(part)).join("/");
@@ -35,7 +35,6 @@ export async function GET(
       "Cache-Control": "private, max-age=31536000, immutable",
     };
     if (isSvg) {
-      // Defense in depth if an SVG was uploaded before the ban.
       headers["Content-Disposition"] = "attachment";
       headers["Content-Security-Policy"] =
         "default-src 'none'; style-src 'none'; sandbox";

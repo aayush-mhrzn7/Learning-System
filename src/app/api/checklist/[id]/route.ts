@@ -8,7 +8,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   const body = checklistUpdateSchema.safeParse(
@@ -47,7 +47,7 @@ export async function PATCH(request: Request, context: Context) {
 
 export async function DELETE(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {

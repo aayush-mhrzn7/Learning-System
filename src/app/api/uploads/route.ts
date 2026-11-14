@@ -11,7 +11,7 @@ const ALLOWED_TYPES = new Set([
 
 export async function POST(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");

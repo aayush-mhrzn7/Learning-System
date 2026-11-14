@@ -4,6 +4,7 @@ import type { Editor } from "@tiptap/react";
 import { LoaderCircle, MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { aiToasts } from "@/lib/toast-messages";
 
 type SelectionAnchor = {
   top: number;
@@ -55,7 +56,6 @@ export function InlineChat({
     setBusy(false);
     setOpen(true);
     onSeedConsumed?.();
-    // Only react to a new seed payload; ignore callback identity churn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed]);
 
@@ -82,7 +82,6 @@ export function InlineChat({
 
     editor.on("selectionUpdate", syncSelection);
     editor.on("blur", () => {
-      // Keep open chat while focusing the input; clear only idle selection chrome.
       window.setTimeout(() => {
         if (open) return;
         const active = document.activeElement;
@@ -170,7 +169,7 @@ export function InlineChat({
         error?: string;
       } | null;
       if (!response.ok || !data?.answer) {
-        throw new Error(data?.error || "Inline chat failed");
+        throw new Error(data?.error || aiToasts.inlineChatFailed);
       }
       setTurns((prev) => [
         ...prev,
@@ -181,7 +180,7 @@ export function InlineChat({
       setTurns((prev) => prev.slice(0, -1));
       setDraft(question);
       toast.error(
-        error instanceof Error ? error.message : "Inline chat failed",
+        error instanceof Error ? error.message : aiToasts.inlineChatFailed,
       );
     } finally {
       if (abortRef.current === controller) abortRef.current = null;

@@ -66,7 +66,6 @@ export async function getProviderSettingsView(
     rows.find((row) => row.isActive)?.provider ??
     (rows[0]?.provider as ProviderId | undefined) ??
     "gpt";
-  // OpenRouter disabled — surface ChatGPT as the active provider in settings.
   const active: ProviderId = isEnabledProviderId(storedActive)
     ? storedActive
     : "gpt";
@@ -77,7 +76,6 @@ export async function getProviderSettingsView(
       gpt: {
         enabled: true,
         model: byProvider.gpt?.model ?? PROVIDER_DEFAULTS.gpt.model,
-        // Never surface a stored custom baseUrl (SSRF).
         baseUrl: PROVIDER_DEFAULTS.gpt.baseUrl,
         apiKeyConfigured: Boolean(byProvider.gpt),
       },
@@ -135,7 +133,6 @@ export async function upsertProviderCredential(input: {
       .where(eq(providerCredentials.userId, input.userId));
   }
 
-  // Ignore client/custom baseUrl — always persist the official endpoint.
   const baseUrl = canonicalProviderBaseUrl(input.provider);
 
   if (current) {
@@ -164,7 +161,6 @@ export async function upsertProviderCredential(input: {
     model: input.model,
     baseUrl,
     apiKeyCiphertext: ciphertext,
-    // First configured provider becomes active automatically.
     isActive: Boolean(input.makeActive) || existingAny.length === 0,
   });
 }
@@ -202,7 +198,6 @@ export async function setActiveProvider(userId: string, provider: ProviderId) {
 export async function resolveActiveProviderCredentials(
   userId: string,
 ): Promise<ResolvedProviderCredentials> {
-  // OpenRouter disabled — always resolve ChatGPT credentials.
   const [row] = await db
     .select()
     .from(providerCredentials)
@@ -225,7 +220,6 @@ export async function resolveActiveProviderCredentials(
     provider: "gpt",
     apiKey: decryptProviderApiKey(row.apiKeyCiphertext, "gpt"),
     model: row.model,
-    // Never use a stored custom baseUrl (SSRF / API key exfil).
     baseUrl: canonicalProviderBaseUrl("gpt"),
   };
 }
@@ -275,7 +269,6 @@ async function probeProviderKey(
           detail: "API key rejected",
         };
       }
-      // Fall through to /models if /key is flaky.
     }
 
     const response = await fetch(`${root}/models`, {

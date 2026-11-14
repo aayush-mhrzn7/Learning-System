@@ -9,7 +9,6 @@ function getMasterKey() {
     throw new Error("CREDENTIALS_ENCRYPTION_KEY is not set");
   }
 
-  // Accept base64 (preferred) or 64-char hex.
   const fromBase64 = Buffer.from(raw, "base64");
   if (fromBase64.length === 32) return fromBase64;
 
@@ -21,7 +20,6 @@ function getMasterKey() {
   );
 }
 
-/** AES-256-GCM. Stored form: base64(iv || ciphertext || tag). */
 export function encryptSecret(plaintext: string) {
   const key = getMasterKey();
   const iv = randomBytes(IV_LENGTH);

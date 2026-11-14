@@ -11,7 +11,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function POST(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {

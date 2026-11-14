@@ -5,7 +5,7 @@ import { searchSchema } from "@/lib/schemas";
 
 export async function GET(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const parsed = searchSchema.safeParse({
     q: new URL(request.url).searchParams.get("q"),

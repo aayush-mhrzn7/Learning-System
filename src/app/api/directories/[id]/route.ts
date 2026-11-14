@@ -12,7 +12,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   const body = directoryUpdateSchema.safeParse(
@@ -60,7 +60,6 @@ export async function PATCH(request: Request, context: Context) {
       return Response.json({ error: "Parent not found" }, { status: 404 });
     }
 
-    // Walk up from the new parent — reject if we hit the moved directory.
     let cursor: string | null = parent.parentId;
     while (cursor) {
       if (cursor === id) {
@@ -109,7 +108,7 @@ export async function PATCH(request: Request, context: Context) {
 
 export async function DELETE(request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {

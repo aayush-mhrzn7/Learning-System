@@ -15,7 +15,7 @@ import {
 
 export async function GET() {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const settings = await getProviderSettingsView(userId);
   return Response.json(settings, {
@@ -26,7 +26,6 @@ export async function GET() {
 const putSchema = z.object({
   provider: z.string().refine(isProviderId),
   model: z.string().trim().min(1).max(200),
-  // Optional: if sent, must be the official allowlisted URL (custom hosts rejected).
   baseUrl: z.string().trim().url().max(500).optional(),
   apiKey: z.string().trim().min(1).max(500).optional(),
   makeActive: z.boolean().optional(),
@@ -38,7 +37,7 @@ const activeSchema = z.object({
 
 export async function PUT(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const body = await request.json().catch(() => null);
   const asActive = activeSchema.safeParse(body);
@@ -92,7 +91,6 @@ export async function PUT(request: Request) {
       userId,
       provider,
       model: parsed.data.model || PROVIDER_DEFAULTS[provider].model,
-      // Always persist the server constant — never a client-supplied host.
       baseUrl: canonicalProviderBaseUrl(provider),
       apiKey: parsed.data.apiKey,
       makeActive: parsed.data.makeActive,

@@ -27,6 +27,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { sidebarToasts } from "@/lib/toast-messages";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -49,6 +50,7 @@ import type {
   DirectoryItem,
   NoteKind,
   NoteSummary,
+  NoteSummaryResponse,
   TreePayload,
 } from "@/lib/types";
 
@@ -73,7 +75,6 @@ function parseTreeDragPayload(raw: string): TreeDragPayload | null {
       return parsed;
     }
   } catch {
-    // ignore malformed payloads
   }
   return null;
 }
@@ -147,7 +148,6 @@ export function Sidebar(props: SidebarProps) {
   const [draggingItem, setDraggingItem] = useState<TreeDragPayload | null>(
     null,
   );
-  // Sync ref so dragOver can call preventDefault before React re-renders.
   const draggingItemRef = useRef<TreeDragPayload | null>(null);
   const dragging = useRef(false);
 
@@ -304,7 +304,7 @@ export function Sidebar(props: SidebarProps) {
           });
           if (!response.ok) throw new Error();
         } catch {
-          rollback(previous, "Could not move note");
+          rollback(previous, sidebarToasts.moveNoteFailed);
         }
         return;
       }
@@ -325,7 +325,7 @@ export function Sidebar(props: SidebarProps) {
         });
         if (!response.ok) throw new Error();
       } catch {
-        rollback(previous, "Could not move directory");
+        rollback(previous, sidebarToasts.moveDirectoryFailed);
       }
       return;
     }
@@ -351,7 +351,7 @@ export function Sidebar(props: SidebarProps) {
         });
         if (!response.ok) throw new Error();
       } catch {
-        rollback(previous, "Could not move note");
+        rollback(previous, sidebarToasts.moveNoteFailed);
       }
       return;
     }
@@ -372,7 +372,7 @@ export function Sidebar(props: SidebarProps) {
       });
       if (!response.ok) throw new Error();
     } catch {
-      rollback(previous, "Could not move directory");
+      rollback(previous, sidebarToasts.moveDirectoryFailed);
     }
   }
 
@@ -434,11 +434,11 @@ export function Sidebar(props: SidebarProps) {
             : undefined,
       });
       if (!response.ok) {
-        rollback(previous, "Could not move item to Trash");
+        rollback(previous, sidebarToasts.trashFailed);
         return;
       }
       closeDelete();
-      toast.success("Moved to Trash");
+      toast.success(sidebarToasts.movedToTrash);
     } finally {
       setSubmitting(false);
     }
@@ -513,7 +513,7 @@ export function Sidebar(props: SidebarProps) {
           }),
         });
         if (!response.ok) throw new Error();
-        const { note } = (await response.json()) as { note: NoteSummary };
+        const { note } = (await response.json()) as NoteSummaryResponse;
         props.onOptimisticTree((tree) => ({
           ...tree,
           notes: tree.notes.map((item) =>
@@ -576,7 +576,7 @@ export function Sidebar(props: SidebarProps) {
 
       setEditAction(null);
     } catch {
-      rollback(previous, "Could not save that change");
+      rollback(previous, sidebarToasts.saveChangeFailed);
     } finally {
       setSubmitting(false);
     }
@@ -611,7 +611,6 @@ export function Sidebar(props: SidebarProps) {
       );
       if (note) return note.directoryId;
     }
-    // Root context: do not nest under an existing directory.
     return null;
   }, [
     props.selectedNoteId,
@@ -626,7 +625,7 @@ export function Sidebar(props: SidebarProps) {
   ) {
     const target = directoryId ?? currentDirectoryId;
     if (!target) {
-      toast.error("Create a directory first");
+      toast.error(sidebarToasts.needDirectory);
       setEditAction({
         kind: "directory",
         mode: "create",
@@ -702,7 +701,6 @@ export function Sidebar(props: SidebarProps) {
 
       if (event.key.toLowerCase() !== "n") return;
 
-      // ⌘N / ⌘⇧N are reserved by Chrome; only Ctrl+N / Ctrl+⇧N are used.
       if (!event.ctrlKey || event.metaKey || event.altKey) return;
 
       event.preventDefault();
@@ -894,7 +892,6 @@ export function Sidebar(props: SidebarProps) {
                 New directory
               </button>
             )}
-            {/* Empty sidebar space — drop here to move to root (no labeled strip). */}
             <div
               className={`min-h-8 flex-1 ${
                 dropTargetId === ROOT_DROP_ID
@@ -1000,7 +997,7 @@ export function Sidebar(props: SidebarProps) {
                 router.replace("/login");
                 router.refresh();
               } catch {
-                toast.error("Could not log out");
+                toast.error(sidebarToasts.logoutFailed);
               }
             })();
           }}

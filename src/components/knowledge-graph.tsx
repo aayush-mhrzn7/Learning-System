@@ -15,11 +15,11 @@ import {
   type ZoomBehavior,
 } from "d3";
 
-// Ensure selection.prototype.transition is registered for fit-to-view.
 void transition;
 import { GraphStar, PanelLeftOpen, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { aiToasts } from "@/lib/toast-messages";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { NoteKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -54,7 +54,6 @@ type SimLink = {
   target: string | SimNode;
 };
 
-/** Labels stay hidden until zoomed in; toggle can override. */
 const LABEL_VISIBLE_AT = 1.35;
 
 function nodeRadius(node: SimNode) {
@@ -73,7 +72,6 @@ function nodeFill(node: SimNode) {
 function appendNodeShape(
   selection: Selection<SVGGElement, SimNode, SVGGElement, unknown>,
 ) {
-  // Writing notes stay round; visualize notes are diamonds so kinds read at a glance.
   selection.each(function (d) {
     const g = select(this);
     const r = nodeRadius(d);
@@ -171,7 +169,7 @@ export function KnowledgeGraph({
     setLoading(true);
     try {
       const response = await fetch("/api/graph");
-      if (!response.ok) throw new Error("Could not load graph");
+      if (!response.ok) throw new Error(aiToasts.graphLoadFailed);
       const data = (await response.json()) as {
         nodes: GraphNode[];
         edges: GraphEdge[];
@@ -180,7 +178,7 @@ export function KnowledgeGraph({
       setEdges(data.edges);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not load graph",
+        error instanceof Error ? error.message : aiToasts.graphLoadFailed,
       );
     } finally {
       setLoading(false);
@@ -369,7 +367,6 @@ export function KnowledgeGraph({
 
     function syncLabelScale(scale: number) {
       scaleRef.current = scale;
-      // Keep label screen size ~constant while the graph zooms.
       label
         .attr("font-size", 11 / scale)
         .attr("stroke-width", 3 / scale)

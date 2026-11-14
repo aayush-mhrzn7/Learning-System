@@ -3,7 +3,7 @@ import { getUsageSummary } from "@/lib/ai-usage";
 
 export async function GET(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const url = new URL(request.url);
   const range = Number(url.searchParams.get("range") ?? "1");

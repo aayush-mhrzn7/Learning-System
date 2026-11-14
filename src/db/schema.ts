@@ -33,12 +33,10 @@ export type VisualizeMessage = {
   role: "user" | "assistant";
   content: string;
   at: string;
-  /** Present on accepted assistant turns — each question keeps its own diagram. */
   diagram?: VisualizeDiagram | null;
   explanation?: string;
   sampleInput?: string;
   sampleOutput?: string;
-  /** Plain-text / ASCII / LaTeX-ish formula when the topic is mathematical. */
   formula?: string;
 };
 
@@ -97,7 +95,6 @@ export const directories = pgTable(
     index("directories_parent_idx").on(table.parentId),
     index("directories_deleted_idx").on(table.deletedAt),
     index("directories_delete_batch_idx").on(table.deleteBatchId),
-    // Tree/list queries filter by owner + not-deleted; migrate when convenient.
     index("directories_user_deleted_idx").on(table.userId, table.deletedAt),
   ],
 );
@@ -143,7 +140,6 @@ export const notes = pgTable(
     index("notes_deleted_idx").on(table.deletedAt),
     index("notes_delete_batch_idx").on(table.deleteBatchId),
     index("notes_updated_idx").on(table.updatedAt),
-    // Tree/list/search filter by owner + not-deleted; migrate when convenient.
     index("notes_user_deleted_idx").on(table.userId, table.deletedAt),
     index("notes_search_idx").using(
       "gin",
@@ -155,7 +151,6 @@ export const notes = pgTable(
   ],
 );
 
-/** Obsidian-style note↔note edges for the knowledge graph. */
 export const noteLinks = pgTable(
   "note_links",
   {
@@ -229,7 +224,6 @@ export const providerCredentials = pgTable(
     provider: aiProvider("provider").notNull(),
     model: text("model").notNull(),
     baseUrl: text("base_url").notNull(),
-    /** AES-GCM payload from encryptSecret — never return to the client. */
     apiKeyCiphertext: text("api_key_ciphertext").notNull(),
     isActive: boolean("is_active").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -248,7 +242,6 @@ export const providerCredentials = pgTable(
   ],
 );
 
-/** One row per OpenAI/OpenRouter API call (Responses or Decisions). */
 export const aiUsage = pgTable(
   "ai_usage",
   {
@@ -258,16 +251,13 @@ export const aiUsage = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     provider: aiProvider("provider").notNull(),
     model: text("model").notNull(),
-    /** responses | decisions */
     api: text("api").notNull(),
-    /** extract | decide | judge | gaps | inline | visualize | reformat */
     task: text("task").notNull(),
     inputTokens: integer("input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
     totalTokens: integer("total_tokens").notNull().default(0),
     toolCallCount: integer("tool_call_count").notNull().default(0),
     latencyMs: integer("latency_ms").notNull().default(0),
-    /** Null when no price map entry for the model. */
     estimatedCostUsd: doublePrecision("estimated_cost_usd"),
     ok: boolean("ok").notNull().default(true),
     error: text("error"),

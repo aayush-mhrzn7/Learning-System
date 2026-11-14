@@ -9,7 +9,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {
@@ -27,7 +27,6 @@ export async function GET(_request: Request, context: Context) {
     return Response.json({ error: "Note not found" }, { status: 404 });
   }
 
-  // Visualize notes only need title/visualize — skip claims/checklist load.
   if (note.kind === "visualize") {
     return Response.json({ note, claims: [], checklist: [] });
   }
@@ -49,7 +48,7 @@ export async function GET(_request: Request, context: Context) {
 
 export async function PATCH(request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   const body = noteUpdateSchema.safeParse(
@@ -92,7 +91,6 @@ export async function PATCH(request: Request, context: Context) {
     }
   }
 
-  // Guard against client races that autosave an empty editor over a real note.
   if (
     body.data.plainText !== undefined &&
     current.plainText.trim().length > 20 &&
@@ -136,7 +134,7 @@ export async function PATCH(request: Request, context: Context) {
 
 export async function DELETE(_request: Request, context: Context) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) {

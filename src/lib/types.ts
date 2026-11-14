@@ -37,6 +37,10 @@ export type ChecklistItem = {
   ticked: boolean;
 };
 
+export type NoteDetailResponse = { note: NoteDetail };
+
+export type NoteSummaryResponse = { note: NoteSummary };
+
 export type NotePayload = {
   note: NoteDetail;
   claims: ClaimFlag[];

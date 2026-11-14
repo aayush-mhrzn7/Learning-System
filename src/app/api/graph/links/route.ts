@@ -20,7 +20,7 @@ async function ownedNotes(userId: string, a: string, b: string) {
 
 export async function POST(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const parsed = noteLinkCreateSchema.safeParse(
     await request.json().catch(() => null),
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const parsed = noteLinkDeleteSchema.safeParse(
     await request.json().catch(() => null),

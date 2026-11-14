@@ -12,7 +12,6 @@ export default function LoginPage() {
   );
 }
 
-/** Same-origin relative paths only — blocks //evil, http(s):, etc. */
 function safeNextPath(value: string | null): string {
   if (!value) return "/";
   if (!value.startsWith("/") || value.startsWith("//")) return "/";

@@ -57,17 +57,19 @@ export async function verifySessionToken(
   return userId;
 }
 
-export async function getSessionUserId() {
+export async function getSessionUserId(): Promise<string | null> {
   const jar = await cookies();
   return verifySessionToken(jar.get(COOKIE_NAME)?.value);
 }
 
-export async function requireUserId() {
+export async function requireUserId(): Promise<
+  { userId: string; error: null } | { userId: null; error: Response }
+> {
   const userId = await getSessionUserId();
   if (!userId) {
-    return { userId: null as string | null, error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
+    return { userId: null, error: Response.json({ error: "Unauthorized" }, { status: 401 }) };
   }
-  return { userId, error: null as Response | null };
+  return { userId, error: null };
 }
 
 export const authCookie = {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type React from "react";
 import { Toaster } from "sonner";
 import {
   ACCENT_ONLY_CHANGED_EVENT,
@@ -13,7 +14,6 @@ import {
   type ColorSchemeOption,
 } from "@/lib/appearance-preferences";
 
-/** Keeps <html> appearance attrs + Sonner theme in sync after boot. */
 export function AppearanceSync() {
   const [toastTheme, setToastTheme] = useState<"light" | "dark">("dark");
 
@@ -71,5 +71,24 @@ export function AppearanceSync() {
     };
   }, []);
 
-  return <Toaster theme={toastTheme} position="bottom-right" />;
+  return (
+    <Toaster
+      theme={toastTheme}
+      position="bottom-right"
+      style={
+        {
+          "--normal-bg": "var(--popover)",
+          "--normal-text": "var(--popover-foreground)",
+          "--normal-border": "var(--border)",
+          "--success-bg": "var(--popover)",
+          "--success-text": "var(--popover-foreground)",
+          "--success-border": "var(--theme-accent)",
+          "--error-bg": "var(--popover)",
+          "--error-text": "var(--popover-foreground)",
+          "--error-border": "var(--destructive)",
+          "--border-radius": "0px",
+        } as React.CSSProperties
+      }
+    />
+  );
 }

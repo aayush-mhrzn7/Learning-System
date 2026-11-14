@@ -7,7 +7,7 @@ const ROOT_ID = "root";
 
 export async function GET() {
   const { userId, error } = await requireUserId();
-  if (error || !userId) return error!;
+  if (error) return error;
 
   const [directoryRows, noteRows] = await Promise.all([
     db

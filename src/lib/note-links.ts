@@ -13,16 +13,11 @@ export function extractWikiLinkTitles(plainText: string) {
   return [...titles];
 }
 
-/**
- * Upsert outgoing links from [[Wiki Title]] mentions in a note's plain text.
- * Resolves titles case-insensitively among the user's non-deleted notes.
- */
 export async function syncWikiLinksFromPlainText(
   userId: string,
   sourceNoteId: string,
   plainText: string,
 ) {
-  // Most autosaves have no wiki links — skip the candidate-note scan.
   if (!plainText.includes("[[")) return;
   const titles = extractWikiLinkTitles(plainText);
   if (titles.length === 0) return;

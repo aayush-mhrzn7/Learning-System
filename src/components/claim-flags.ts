@@ -57,8 +57,6 @@ function findClaimRanges(text: string, claimText: string, positions: number[]) {
   }
   if (ranges.length > 0) return ranges;
 
-  // Extraction uses documentToText whitespace; the live doc may differ
-  // (hard breaks, adjacent marks). Match on flexible whitespace.
   const parts = needle.split(/\s+/).filter(Boolean).map(escapeRegExp);
   if (parts.length === 0) return ranges;
   const pattern = new RegExp(parts.join("\\s+"), "gi");
@@ -93,7 +91,6 @@ function locateClaims(
   });
 
   for (const claim of claims) {
-    // Only wrong facts get squiggles. Soft/unsure claims stay unmarked.
     if (claim.verdict !== "incorrect") continue;
     for (const range of findClaimRanges(text, claim.claimText, positions)) {
       decorations.push(createDecoration(range.from, range.to, claim));

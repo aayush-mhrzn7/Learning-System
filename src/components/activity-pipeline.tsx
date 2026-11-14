@@ -76,7 +76,6 @@ export function createPipelineRun(
       emptyStep("score", "Score claims"),
       emptyStep("web", "Web fact-check"),
     );
-    // Gaps only on publish/re-publish with fact-check — not as-is, not fact-check-only.
     if (kind !== "fact-check") {
       steps.push(emptyStep("gaps", "What's missing"));
     }
@@ -146,7 +145,6 @@ export function ActivityPipeline({
 
       function onMove(moveEvent: PointerEvent) {
         if (!dragging.current) return;
-        // Dragging the left edge: move left → wider.
         const next = Math.min(
           ACTIVITY_MAX_WIDTH,
           Math.max(

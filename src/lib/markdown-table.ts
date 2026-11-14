@@ -17,7 +17,6 @@ function isSeparator(line: string) {
   return SEPARATOR_LINE.test(line.trim()) && line.includes("-");
 }
 
-/** Convert a GFM pipe table in plain text into HTML TipTap can parse. */
 export function markdownTableToHtml(text: string): string | null {
   const lines = text
     .replaceAll("\r\n", "\n")
