@@ -63,7 +63,7 @@ function nodeRadius(node: SimNode) {
 }
 
 function nodeFill(node: SimNode) {
-  if (node.type === "root") return "var(--foreground)";
+  if (node.type === "root") return "oklch(0.72 0.16 65)";
   if (node.type === "directory") return "var(--theme-accent)";
   if (node.kind === "visualize") return "var(--theme-accent)";
   return "var(--muted-foreground)";

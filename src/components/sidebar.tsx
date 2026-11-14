@@ -17,6 +17,7 @@ import {
   DiagramFlowHorizontal,
   GraphStar,
 } from "lucide-react";
+import { ColorSchemeToggle } from "@/components/color-scheme-toggle";
 import { useRouter } from "next/navigation";
 import {
   FormEvent,
@@ -756,13 +757,16 @@ export function Sidebar(props: SidebarProps) {
         <span className="text-xs font-medium uppercase tracking-[0.2em]">
           Learning
         </span>
-        <button
-          onClick={props.onCollapse}
-          className="icon-button"
-          aria-label="Collapse sidebar"
-        >
-          <PanelLeftClose size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          <ColorSchemeToggle />
+          <button
+            onClick={props.onCollapse}
+            className="icon-button"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        </div>
       </div>
 
       <button
