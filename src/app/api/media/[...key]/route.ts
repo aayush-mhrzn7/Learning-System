@@ -1,6 +1,6 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { requireUserId } from "@/lib/auth";
-import { getS3Bucket, getS3Client } from "@/lib/s3";
+import { getR2Bucket, getR2Client } from "@/lib/r2";
 
 export async function GET(
   _request: Request,
@@ -16,9 +16,9 @@ export async function GET(
   }
 
   try {
-    const object = await getS3Client().send(
+    const object = await getR2Client().send(
       new GetObjectCommand({
-        Bucket: getS3Bucket(),
+        Bucket: getR2Bucket(),
         Key: key,
       }),
     );

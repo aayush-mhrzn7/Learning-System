@@ -1,5 +1,5 @@
 import { requireUserId } from "@/lib/auth";
-import { uploadObject } from "@/lib/s3";
+import { uploadObject } from "@/lib/r2";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED_TYPES = new Set([

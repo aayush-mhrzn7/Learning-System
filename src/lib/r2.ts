@@ -9,22 +9,24 @@ function requiredEnv(name: string) {
 
 let client: S3Client | null = null;
 
-export function getS3Client() {
+export function getR2Client() {
   if (client) return client;
+  const endpoint =
+    process.env.R2_ENDPOINT?.trim() ||
+    `https://${requiredEnv("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`;
   client = new S3Client({
-    region: process.env.AWS_REGION?.trim() || "auto",
-    endpoint: requiredEnv("AWS_ENDPOINT_URL_S3"),
+    region: "auto",
+    endpoint,
     credentials: {
-      accessKeyId: requiredEnv("AWS_ACCESS_KEY_ID"),
-      secretAccessKey: requiredEnv("AWS_SECRET_ACCESS_KEY"),
+      accessKeyId: requiredEnv("R2_ACCESS_KEY_ID"),
+      secretAccessKey: requiredEnv("R2_SECRET_ACCESS_KEY"),
     },
-    forcePathStyle: false,
   });
   return client;
 }
 
-export function getS3Bucket() {
-  return requiredEnv("S3_BUCKET");
+export function getR2Bucket() {
+  return requiredEnv("R2_BUCKET");
 }
 
 export function mediaObjectUrl(key: string) {
@@ -42,10 +44,10 @@ export async function uploadObject({
   keyPrefix: string;
   filename: string;
 }) {
-  const bucket = getS3Bucket();
+  const bucket = getR2Bucket();
   const safeName = filename.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 80);
   const key = `${keyPrefix}/${randomUUID()}-${safeName || "file"}`;
-  await getS3Client().send(
+  await getR2Client().send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
