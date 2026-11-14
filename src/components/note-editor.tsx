@@ -1152,7 +1152,7 @@ export function NoteEditor({
               ) : null}
             </span>
             {payload.note.editedSincePublish ? (
-              <span className="hidden truncate text-[11px] text-amber-300/80 sm:inline">
+              <span className="hidden truncate text-[11px] text-amber-700 dark:text-amber-300 sm:inline">
                 Edited since publish · {formatStamp(payload.note.updatedAt)}
               </span>
             ) : null}
@@ -1160,7 +1160,7 @@ export function NoteEditor({
               <button
                 onClick={() => void runPipeline("fact-check")}
                 disabled={pipelineBusy}
-                className="flex min-w-0 items-center gap-1 truncate text-[11px] text-amber-300/80"
+                className="flex min-w-0 items-center gap-1 truncate text-[11px] text-amber-700 dark:text-amber-300"
               >
                 <AlertCircle size={12} className="shrink-0" />
                 <span className="truncate">Retry fact-check</span>

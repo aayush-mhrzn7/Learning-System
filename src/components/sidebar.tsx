@@ -1236,7 +1236,7 @@ function TreeNoteRow({
           Rename
         </ContextMenuItem>
         <ContextMenuItem
-          className="text-red-400 data-[highlighted]:text-red-300"
+          className="text-red-600 data-[highlighted]:text-red-700 dark:text-red-400 dark:data-[highlighted]:text-red-300"
           onSelect={onDelete}
         >
           <Trash2 size={14} />
@@ -1376,7 +1376,7 @@ function DirectoryNode(props: DirectoryNodeProps) {
             Rename
           </ContextMenuItem>
           <ContextMenuItem
-            className="text-red-400 data-[highlighted]:text-red-300"
+            className="text-red-600 data-[highlighted]:text-red-700 dark:text-red-400 dark:data-[highlighted]:text-red-300"
             onSelect={() => props.onDeleteDirectory(props.directory)}
           >
             <Trash2 size={14} />

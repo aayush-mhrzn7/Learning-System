@@ -91,7 +91,7 @@ export default function SignupPage() {
           placeholder="Confirm password"
         />
         {error ? (
-          <p className="mt-3 font-mono text-xs text-red-400">{error}</p>
+          <p className="mt-3 font-mono text-xs text-red-600 dark:text-red-400">{error}</p>
         ) : null}
         <button
           type="submit"
