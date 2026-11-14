@@ -3,7 +3,6 @@
 import {
   ChevronDown,
   ChevronRight,
-  FileText,
   FilePlus2,
   Folder,
   FolderPlus,
@@ -54,6 +53,33 @@ import type {
   NoteSummaryResponse,
   TreePayload,
 } from "@/lib/types";
+
+function MarkdownIcon({
+  size = 14,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M6 15V9l3 3 3-3v6" />
+      <path d="M18 9v6m-2.5-2.5L18 15l2.5-2.5" />
+    </svg>
+  );
+}
 
 const SIDEBAR_WIDTH_KEY = "learning-sidebar-width-v2";
 const SIDEBAR_MIN_WIDTH = 260;
@@ -1226,7 +1252,7 @@ function TreeNoteRow({
           {note.kind === "visualize" ? (
             <DiagramFlowHorizontal size={13} className="shrink-0 opacity-60" />
           ) : (
-            <FileText size={13} className="shrink-0 opacity-60" />
+            <MarkdownIcon size={13} className="shrink-0 opacity-60" />
           )}
           <span className="truncate">{note.title}</span>
         </button>
