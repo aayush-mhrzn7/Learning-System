@@ -185,7 +185,7 @@ export function ActivityPipeline({
         onClick={onClose}
       />
       <aside
-        className="fixed inset-y-0 right-0 z-50 flex h-dvh max-md:!w-[min(100vw-3rem,22rem)] shrink-0 flex-col border-l border-border bg-sidebar shadow-2xl md:relative md:z-auto md:h-screen md:shadow-none"
+        className="fixed inset-y-0 right-0 z-50 flex h-dvh max-md:!w-[min(100vw-3rem,22rem)] shrink-0 flex-col border-l border-border bg-sidebar shadow-2xl md:relative md:z-auto md:h-auto md:shadow-none"
         style={{ width }}
       >
         <div

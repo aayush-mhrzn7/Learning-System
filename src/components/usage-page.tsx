@@ -189,8 +189,8 @@ export function UsagePage({
   }, [range]);
 
   return (
-    <div className="flex min-w-0 flex-1">
-      <main className="relative flex h-dvh min-w-0 flex-1 flex-col md:h-screen">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2 sm:h-14 sm:px-4 sm:py-0">
           {sidebarCollapsed ? (
             <button

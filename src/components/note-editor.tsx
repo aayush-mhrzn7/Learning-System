@@ -1085,8 +1085,8 @@ export function NoteEditor({
 
   if (loadError) {
     return (
-      <div className="flex min-w-0 flex-1">
-        <main className="relative flex h-dvh min-w-0 flex-1 flex-col items-center justify-center gap-3 px-6 md:h-screen">
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 px-6">
           {sidebarCollapsed ? (
             <button
               className="icon-button absolute left-3 top-3 sm:left-4 sm:top-4"
@@ -1120,8 +1120,8 @@ export function NoteEditor({
     payload.note.status === "published" ? "re-publish" : "publish";
 
   return (
-    <div className="flex min-w-0 flex-1">
-      <main className="relative flex h-dvh min-w-0 flex-1 flex-col md:h-screen">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2 sm:h-14 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
           <div className="flex min-w-0 items-center gap-2">
             {sidebarCollapsed ? (
@@ -1540,7 +1540,7 @@ function NoteEditorSkeleton({
       aria-busy="true"
       aria-label="Loading note"
     >
-      <main className="relative flex h-dvh min-w-0 flex-1 flex-col md:h-screen">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 flex-col gap-2 border-b border-border px-3 py-2 sm:h-14 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
           <div className="flex min-w-0 items-center gap-2">
             {sidebarCollapsed ? (

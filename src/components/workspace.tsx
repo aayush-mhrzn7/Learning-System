@@ -54,6 +54,11 @@ const SearchDialog = dynamic(
     import("@/components/search-dialog").then((mod) => mod.SearchDialog),
   { ssr: false },
 );
+const TerminalPanel = dynamic(
+  () =>
+    import("@/components/terminal-panel").then((mod) => mod.TerminalPanel),
+  { ssr: false },
+);
 const SettingsDialog = dynamic(
   () =>
     import("@/components/settings-dialog").then((mod) => mod.SettingsDialog),
@@ -77,6 +82,8 @@ export function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalMounted, setTerminalMounted] = useState(false);
   const [firstDirectoryOpen, setFirstDirectoryOpen] = useState(false);
   const [firstDirectoryName, setFirstDirectoryName] = useState("");
   const [creatingDirectory, setCreatingDirectory] = useState(false);
@@ -176,6 +183,16 @@ export function Workspace() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchOpen(true);
+      }
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "j"
+      ) {
+        event.preventDefault();
+        setTerminalMounted(true);
+        setTerminalOpen((current) => !current);
       }
       if (event.ctrlKey && !event.metaKey && event.key === ",") {
         event.preventDefault();
@@ -303,67 +320,84 @@ export function Workspace() {
         />
       </div>
 
-      {usageOpen ? (
-        <UsagePage
-          sidebarCollapsed={sidebarCollapsed}
-          onOpenSidebar={openSidebar}
-        />
-      ) : graphOpen ? (
-        <KnowledgeGraph
-          sidebarCollapsed={sidebarCollapsed}
-          onOpenSidebar={openSidebar}
-          onOpenNote={openNote}
-        />
-      ) : selectedNoteId ? (
-        tree.notes.find((note) => note.id === selectedNoteId)?.kind ===
-        "visualize" ? (
-          <VisualizeNote
-            key={selectedNoteId}
-            noteId={selectedNoteId}
-            fresh={freshNoteId === selectedNoteId}
-            initialTitle={
-              tree.notes.find((note) => note.id === selectedNoteId)?.title
-            }
-            sidebarCollapsed={sidebarCollapsed}
-            onOpenSidebar={openSidebar}
-            onTitleChange={onNoteTitleChange}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          {usageOpen ? (
+            <UsagePage
+              sidebarCollapsed={sidebarCollapsed}
+              onOpenSidebar={openSidebar}
+            />
+          ) : graphOpen ? (
+            <KnowledgeGraph
+              sidebarCollapsed={sidebarCollapsed}
+              onOpenSidebar={openSidebar}
+              onOpenNote={openNote}
+            />
+          ) : selectedNoteId ? (
+            tree.notes.find((note) => note.id === selectedNoteId)?.kind ===
+            "visualize" ? (
+              <VisualizeNote
+                key={selectedNoteId}
+                noteId={selectedNoteId}
+                fresh={freshNoteId === selectedNoteId}
+                initialTitle={
+                  tree.notes.find((note) => note.id === selectedNoteId)?.title
+                }
+                sidebarCollapsed={sidebarCollapsed}
+                onOpenSidebar={openSidebar}
+                onTitleChange={onNoteTitleChange}
+              />
+            ) : (
+              <NoteEditor
+                key={selectedNoteId}
+                noteId={selectedNoteId}
+                fresh={freshNoteId === selectedNoteId}
+                initialTitle={
+                  tree.notes.find((note) => note.id === selectedNoteId)?.title
+                }
+                sidebarCollapsed={sidebarCollapsed}
+                onOpenSidebar={openSidebar}
+                onTreeChanged={loadTree}
+                onTitleChange={onNoteTitleChange}
+              />
+            )
+          ) : (
+            <main className="relative grid min-w-0 flex-1 place-items-center px-6">
+              {sidebarCollapsed ? (
+                <button
+                  onClick={openSidebar}
+                  className="icon-button absolute left-3 top-3 sm:left-4 sm:top-4"
+                  aria-label="Open sidebar"
+                >
+                  <PanelLeftOpen size={16} />
+                </button>
+              ) : null}
+              <div className="text-center">
+                <p className="mb-6 text-sm text-muted-foreground">
+                  Create a directory to begin.
+                </p>
+                <Button onClick={() => setFirstDirectoryOpen(true)}>
+                  <FolderPlus size={14} />
+                  New directory
+                </Button>
+              </div>
+            </main>
+          )}
+
+        </div>
+        {terminalMounted ? (
+          <TerminalPanel
+            open={terminalOpen}
+            tree={tree}
+            getTree={() => treeRef.current}
+            reload={async () => {
+              await loadTree();
+            }}
+            openNote={(id) => openNote(id)}
+            onClose={() => setTerminalOpen(false)}
           />
-        ) : (
-          <NoteEditor
-            key={selectedNoteId}
-            noteId={selectedNoteId}
-            fresh={freshNoteId === selectedNoteId}
-            initialTitle={
-              tree.notes.find((note) => note.id === selectedNoteId)?.title
-            }
-            sidebarCollapsed={sidebarCollapsed}
-            onOpenSidebar={openSidebar}
-            onTreeChanged={loadTree}
-            onTitleChange={onNoteTitleChange}
-          />
-        )
-      ) : (
-        <main className="relative grid min-w-0 flex-1 place-items-center px-6">
-          {sidebarCollapsed ? (
-            <button
-              onClick={openSidebar}
-              className="icon-button absolute left-3 top-3 sm:left-4 sm:top-4"
-              aria-label="Open sidebar"
-            >
-              <PanelLeftOpen size={16} />
-            </button>
-          ) : null}
-          <div className="text-center">
-            <p className="mb-6 text-sm text-muted-foreground">
-              Create a directory to begin.
-            </p>
-            <Button onClick={() => setFirstDirectoryOpen(true)}>
-              <FolderPlus size={14} />
-              New directory
-            </Button>
-          </div>
-        </main>
-      )}
+        ) : null}
+      </div>
 
       <SearchDialog
         open={searchOpen}
