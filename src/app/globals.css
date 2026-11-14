@@ -405,6 +405,8 @@ button:disabled {
 
 .learning-editor {
   min-height: 50vh;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   outline: none;
   color: var(--foreground);
   font-family: var(--font-sf-pro);
@@ -612,6 +614,8 @@ button:disabled {
 }
 
 .learning-editor pre {
+  max-width: 100%;
+  overflow-wrap: normal;
   overflow-x: auto;
   border: 1px solid var(--editor-code-border);
   background: var(--editor-code-bg);

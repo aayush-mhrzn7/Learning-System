@@ -1235,7 +1235,7 @@ export function NoteEditor({
         <div className="relative flex min-h-0 flex-1">
           <div
             ref={scrollRef}
-            className="min-w-0 flex-1 overflow-y-auto"
+            className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
             onScroll={() => {
               if (hovered) setHovered(null);
             }}
