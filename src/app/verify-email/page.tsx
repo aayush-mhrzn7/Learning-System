@@ -123,8 +123,11 @@ function VerifyEmailForm() {
           Scholar
         </p>
         <h1 className="mb-2 text-2xl font-medium tracking-tight">Verify email</h1>
-        <p className="mb-8 text-xs text-muted-foreground">
+        <p className="mb-2 text-xs text-muted-foreground">
           Code sent to <span className="text-foreground">{email}</span>.
+        </p>
+        <p className="mb-8 text-xs text-muted-foreground">
+          Don&apos;t see it? Check your spam or junk folder too.
         </p>
         <InputOTP
           maxLength={6}
