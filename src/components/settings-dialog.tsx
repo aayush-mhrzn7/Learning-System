@@ -178,6 +178,7 @@ function ProviderIconShell({
         height={size === "sm" ? 14 : 18}
         className={cn(
           "object-contain",
+          provider.iconShell === "dark" && "dark:invert",
           size === "sm" ? "size-3.5" : "size-[18px]",
         )}
         draggable={false}
