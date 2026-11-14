@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { PasswordInput } from "@/components/password-input";
 import { useRouter } from "next/navigation";
 
 export default function SignupPage() {
@@ -68,27 +69,24 @@ export default function SignupPage() {
         <label htmlFor="password" className="sr-only">
           Password
         </label>
-        <input
+        <PasswordInput
+          className="mb-4"
           id="password"
           name="password"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}
-          className="mb-4 h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground"
           placeholder="Password (min 8 characters)"
         />
         <label htmlFor="confirm" className="sr-only">
           Confirm password
         </label>
-        <input
+        <PasswordInput
           id="confirm"
           name="confirm"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}
-          className="h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground"
           placeholder="Confirm password"
         />
         {error ? (

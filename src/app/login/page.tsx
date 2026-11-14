@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, Suspense, useState } from "react";
+import { PasswordInput } from "@/components/password-input";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
@@ -88,13 +89,11 @@ function LoginForm() {
         <label htmlFor="password" className="sr-only">
           Password
         </label>
-        <input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           required
-          className="h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground"
           placeholder="Password"
         />
         <div className="mt-3 text-right">
