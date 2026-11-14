@@ -10,7 +10,7 @@ const MAX_ATTEMPTS = 5;
 const schema = z.object({
   email: z.email().trim().toLowerCase().max(320),
   otp: z.string().regex(/^\d{6}$/),
-  password: z.string().min(8).max(200),
+  password: z.string().min(8).max(200).optional(),
 });
 
 export async function POST(request: Request) {
@@ -56,6 +56,8 @@ export async function POST(request: Request) {
       .where(eq(passwordResets.id, reset.id));
     return Response.json({ error: "Incorrect code" }, { status: 400 });
   }
+
+  if (!password) return Response.json({ ok: true, verified: true });
 
   await db
     .update(users)

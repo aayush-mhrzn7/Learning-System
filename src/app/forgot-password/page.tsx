@@ -3,8 +3,17 @@
 import Link from "next/link";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 const OTP_TTL_MS = 5 * 60 * 1000;
+
+const primaryButton =
+  "mt-8 h-10 w-full bg-foreground text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50";
 
 const inputClass =
   "h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground";
@@ -39,6 +48,7 @@ function ForgotPasswordForm() {
 
   const [email, setEmail] = useState(linkEmail);
   const [otp, setOtp] = useState(linkOtp);
+  const [verified, setVerified] = useState(false);
   const [codeSent, setCodeSent] = useState(Boolean(linkEmail && linkOtp));
   const [expiresAt, setExpiresAt] = useState<number>(
     () => linkExpiry ?? Date.now() + OTP_TTL_MS,
@@ -54,6 +64,11 @@ function ForgotPasswordForm() {
   }, [codeSent]);
 
   const remaining = expiresAt - now;
+  const errorLine = error ? (
+    <p className="mt-3 font-mono text-xs text-red-600 dark:text-red-400">
+      {error}
+    </p>
+  ) : null;
   const expired = codeSent && remaining <= 0;
 
   async function requestCode() {
@@ -75,6 +90,7 @@ function ForgotPasswordForm() {
       return;
     }
     setOtp("");
+    setVerified(false);
     setExpiresAt(data?.expiresAt ?? Date.now() + OTP_TTL_MS);
     setNow(Date.now());
     setCodeSent(true);
@@ -83,6 +99,28 @@ function ForgotPasswordForm() {
   async function submitEmail(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await requestCode();
+  }
+
+  async function submitOtp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    const response = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp }),
+    });
+    setLoading(false);
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as {
+        error?: string;
+        expired?: boolean;
+      } | null;
+      setError(data?.error ?? "Incorrect code");
+      if (data?.expired) setExpiresAt(0);
+      return;
+    }
+    setVerified(true);
   }
 
   async function submitReset(event: FormEvent<HTMLFormElement>) {
@@ -107,7 +145,10 @@ function ForgotPasswordForm() {
         expired?: boolean;
       } | null;
       setError(data?.error ?? "Could not reset password");
-      if (data?.expired) setExpiresAt(0);
+      if (data?.expired) {
+        setExpiresAt(0);
+        setVerified(false);
+      }
       setLoading(false);
       return;
     }
@@ -144,42 +185,20 @@ function ForgotPasswordForm() {
               className={inputClass}
               placeholder="Email"
             />
-            {error ? (
-              <p className="mt-3 font-mono text-xs text-red-600 dark:text-red-400">
-                {error}
-              </p>
-            ) : null}
+            {errorLine}
             <button
               type="submit"
               disabled={loading}
-              className="mt-8 h-10 w-full bg-foreground text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50"
+              className={primaryButton}
             >
               {loading ? "Sending…" : "Send code"}
             </button>
           </form>
-        ) : (
+        ) : verified ? (
           <form onSubmit={submitReset}>
             <p className="mb-8 text-xs text-muted-foreground">
-              Code sent to <span className="text-foreground">{email}</span>.
+              Code verified. Choose a new password.
             </p>
-            <label htmlFor="otp" className="sr-only">
-              Code
-            </label>
-            <input
-              id="otp"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="\d{6}"
-              maxLength={6}
-              required
-              disabled={expired}
-              value={otp}
-              onChange={(event) =>
-                setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
-              }
-              className={`${inputClass} mb-4 font-mono tracking-[0.4em]`}
-              placeholder="6-digit code"
-            />
             <label htmlFor="password" className="sr-only">
               New password
             </label>
@@ -188,9 +207,9 @@ function ForgotPasswordForm() {
               name="password"
               type="password"
               autoComplete="new-password"
+              autoFocus
               minLength={8}
               required
-              disabled={expired}
               className={`${inputClass} mb-4`}
               placeholder="New password"
             />
@@ -204,12 +223,47 @@ function ForgotPasswordForm() {
               autoComplete="new-password"
               minLength={8}
               required
-              disabled={expired}
               className={inputClass}
               placeholder="Confirm password"
             />
+            {errorLine}
+            <button
+              type="submit"
+              disabled={loading}
+              className={primaryButton}
+            >
+              {loading ? "Resetting…" : "Reset password"}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={submitOtp}>
+            <p className="mb-8 text-xs text-muted-foreground">
+              Code sent to <span className="text-foreground">{email}</span>.
+            </p>
+            <InputOTP
+              maxLength={6}
+              value={otp}
+              onChange={(value) => setOtp(value.replace(/\D/g, ""))}
+              disabled={expired}
+              autoFocus
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              aria-label="6-digit code"
+            >
+              <InputOTPGroup>
+                {[0, 1, 2].map((index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                {[3, 4, 5].map((index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
 
-            <div className="mt-3 flex items-center justify-between font-mono text-xs">
+            <div className="mt-4 flex items-center justify-between font-mono text-xs">
               {expired ? (
                 <span className="text-red-600 dark:text-red-400">
                   Code expired
@@ -230,17 +284,13 @@ function ForgotPasswordForm() {
                 </button>
               ) : null}
             </div>
-            {error ? (
-              <p className="mt-3 font-mono text-xs text-red-600 dark:text-red-400">
-                {error}
-              </p>
-            ) : null}
+            {errorLine}
             <button
               type="submit"
-              disabled={loading || expired}
-              className="mt-8 h-10 w-full bg-foreground text-sm font-medium text-background transition-opacity hover:opacity-85 disabled:opacity-50"
+              disabled={loading || expired || otp.length !== 6}
+              className={primaryButton}
             >
-              {loading && !expired ? "Resetting…" : "Reset password"}
+              {loading ? "Checking…" : "Continue"}
             </button>
           </form>
         )}
