@@ -5,8 +5,8 @@ import { APPEARANCE_BOOT_SCRIPT } from "@/lib/appearance-preferences";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Learning System",
-  description: "Learning System",
+  title: "Scholar",
+  description: "Scholar",
 };
 
 export const viewport: Viewport = {

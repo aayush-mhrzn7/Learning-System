@@ -54,7 +54,7 @@ function LoginForm() {
     <main className="grid min-h-screen place-items-center bg-background px-6">
       <form onSubmit={submit} className="w-full max-w-xs">
         <p className="mb-10 text-xs uppercase tracking-[0.28em] text-muted-foreground">
-          Learning System
+          Scholar
         </p>
         <h1 className="mb-8 text-2xl font-medium tracking-tight">Log in</h1>
         <label htmlFor="email" className="sr-only">
@@ -82,6 +82,14 @@ function LoginForm() {
           className="h-11 w-full border-b border-border bg-transparent text-sm outline-none transition-colors focus:border-foreground"
           placeholder="Password"
         />
+        <div className="mt-3 text-right">
+          <Link
+            href="/forgot-password"
+            className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
         {error ? (
           <p className="mt-3 font-mono text-xs text-red-600 dark:text-red-400">{error}</p>
         ) : null}

@@ -755,7 +755,7 @@ export function Sidebar(props: SidebarProps) {
       )}
       <div className="flex h-14 items-center justify-between border-b border-border px-3 sm:px-4">
         <span className="text-xs font-medium uppercase tracking-[0.2em]">
-          Learning
+          Scholar
         </span>
         <div className="flex items-center gap-1">
           <ColorSchemeToggle />

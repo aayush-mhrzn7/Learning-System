@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { authCookie, createSessionToken } from "@/lib/auth";
+import { resolveMailLanguage, sendWelcomeEmail } from "@/lib/mail";
 import { hashPassword } from "@/lib/password";
 
 const signupSchema = z.object({
@@ -42,6 +43,9 @@ export async function POST(request: Request) {
   if (!user) {
     return Response.json({ error: "Could not create account" }, { status: 500 });
   }
+
+  const lang = resolveMailLanguage(request.headers.get("accept-language"));
+  after(() => sendWelcomeEmail(payload.data.email, lang));
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set(authCookie.name, await createSessionToken(user.id), {

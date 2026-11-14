@@ -79,8 +79,8 @@ function createClient(credentials: ResolvedProviderCredentials) {
     defaultHeaders:
       credentials.provider === "openrouter"
         ? {
-            "HTTP-Referer": "https://learning-system.local",
-            "X-Title": "Learning System",
+            "HTTP-Referer": "https://scholar.local",
+            "X-Title": "Scholar",
           }
         : undefined,
   });

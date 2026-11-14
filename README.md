@@ -1,4 +1,4 @@
-# Learning System
+# Scholar
 
 A private learning notebook that fact-checks your writing and points out
 important concepts you missed without writing notes for you.

@@ -6,6 +6,7 @@ export async function proxy(request: NextRequest) {
   const isAuthRoute =
     pathname === "/login" ||
     pathname === "/signup" ||
+    pathname === "/forgot-password" ||
     pathname.startsWith("/api/auth/");
   const authenticated = Boolean(
     await verifySessionToken(request.cookies.get(authCookie.name)?.value),

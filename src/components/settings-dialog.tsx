@@ -436,7 +436,7 @@ export function SettingsDialog({
       >
         <DialogTitle className="sr-only">Settings</DialogTitle>
         <DialogDescription className="sr-only">
-          Configure AI providers for Learning System.
+          Configure AI providers for Scholar.
         </DialogDescription>
 
         <aside className="flex w-full shrink-0 flex-row items-center gap-1 border-b border-border bg-muted/30 p-3 pr-12 md:w-44 md:flex-col md:items-stretch md:gap-0 md:border-r md:border-b-0 md:pr-3">
