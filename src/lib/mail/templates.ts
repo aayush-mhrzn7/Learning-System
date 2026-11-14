@@ -108,8 +108,13 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
+const FONT =
+  "'SF Pro Text','SF Pro Display','SF Pro',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif";
+const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
+
 function layout(
   lang: MailLanguage,
+  preheader: string,
   title: string,
   body: string,
   content: string,
@@ -117,17 +122,36 @@ function layout(
 ) {
   return `<!doctype html>
 <html lang="${lang}">
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f4f5;padding:32px 16px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background:#ffffff;border:1px solid #e4e4e7;">
-<tr><td style="padding:32px 32px 8px;">
-<p style="margin:0 0 24px;font-size:11px;letter-spacing:0.28em;text-transform:uppercase;color:#71717a;">${APP_NAME}</p>
-<h1 style="margin:0 0 12px;font-size:22px;font-weight:600;line-height:1.3;">${escapeHtml(title)}</h1>
-<p style="margin:0;font-size:14px;line-height:1.6;color:#3f3f46;">${escapeHtml(body)}</p>
-</td></tr>
-<tr><td style="padding:16px 32px 32px;">${content}</td></tr>
-<tr><td style="padding:16px 32px;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa;">${escapeHtml(footer)}</td></tr>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<style>
+:root{color-scheme:light dark;supported-color-schemes:light dark;}
+@media (prefers-color-scheme:dark){
+.bg{background:#000000 !important;}
+.fg{color:#ffffff !important;}
+.sub{color:#a3a3a3 !important;}
+.mut{color:#737373 !important;}
+.bd{border-color:#262626 !important;}
+.bd2{border-color:#404040 !important;}
+.btn{background:#ffffff !important;}
+.btnt{color:#000000 !important;}
+}
+</style>
+<title>${escapeHtml(title)}</title>
+</head>
+<body class="bg fg" style="margin:0;padding:0;background:#ffffff;font-family:${FONT};color:#000000;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" class="bg" style="background:#ffffff;">
+<tr><td align="center" style="padding:56px 24px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:440px;">
+<tr><td class="fg" style="padding:0 0 48px;font-size:12px;font-weight:500;letter-spacing:0.2em;text-transform:uppercase;color:#000000;">${APP_NAME}</td></tr>
+<tr><td class="fg" style="padding:0 0 16px;font-size:28px;font-weight:600;line-height:1.2;letter-spacing:-0.02em;color:#000000;">${escapeHtml(title)}</td></tr>
+<tr><td class="sub" style="padding:0 0 36px;font-size:15px;line-height:1.7;color:#525252;">${escapeHtml(body)}</td></tr>
+<tr><td style="padding:0 0 48px;">${content}</td></tr>
+<tr><td class="bd mut" style="padding:24px 0 0;border-top:1px solid #e5e5e5;font-size:12px;color:#737373;">${escapeHtml(footer)}</td></tr>
 </table>
 </td></tr>
 </table>
@@ -136,7 +160,20 @@ function layout(
 }
 
 function button(href: string, label: string) {
-  return `<a href="${escapeHtml(href)}" style="display:inline-block;background:#18181b;color:#ffffff;text-decoration:none;font-size:14px;font-weight:500;padding:12px 24px;">${escapeHtml(label)}</a>`;
+  return `<table role="presentation" cellspacing="0" cellpadding="0"><tr><td class="btn" style="background:#000000;">
+<a class="btnt" href="${escapeHtml(href)}" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:14px 28px;">${escapeHtml(label)}</a>
+</td></tr></table>`;
+}
+
+function codeBoxes(otp: string) {
+  const cells = otp
+    .split("")
+    .map(
+      (digit) =>
+        `<td style="padding:0 4px 0 0;"><div class="bd2 fg" style="width:44px;height:56px;line-height:56px;text-align:center;border:1px solid #d4d4d4;font-family:${MONO};font-size:24px;font-weight:600;color:#000000;">${escapeHtml(digit)}</div></td>`,
+    )
+    .join("");
+  return `<table role="presentation" cellspacing="0" cellpadding="0"><tr>${cells}</tr></table>`;
 }
 
 export function welcomeEmail(lang: MailLanguage) {
@@ -146,6 +183,7 @@ export function welcomeEmail(lang: MailLanguage) {
     subject: copy.welcomeSubject,
     html: layout(
       lang,
+      copy.welcomeBody,
       copy.welcomeTitle,
       copy.welcomeBody,
       button(url, copy.welcomeButton),
@@ -165,15 +203,22 @@ export function resetOtpEmail(
   link.searchParams.set("otp", options.otp);
   link.searchParams.set("exp", String(options.expiresAt));
 
-  const content = `<p style="margin:0 0 8px;font-size:12px;color:#71717a;">${escapeHtml(copy.otpCodeLabel)}</p>
-<p style="margin:0 0 20px;font-size:32px;font-weight:600;letter-spacing:0.3em;font-family:ui-monospace,Menlo,Consolas,monospace;">${options.otp}</p>
+  const content = `<p class="mut" style="margin:0 0 14px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#737373;">${escapeHtml(copy.otpCodeLabel)}</p>
+${codeBoxes(options.otp)}
+<p class="sub" style="margin:16px 0 32px;font-size:13px;color:#525252;">${escapeHtml(copy.otpExpiry)}</p>
 ${button(link.toString(), copy.otpButton)}
-<p style="margin:24px 0 4px;font-size:13px;color:#3f3f46;">${escapeHtml(copy.otpExpiry)}</p>
-<p style="margin:0;font-size:12px;color:#a1a1aa;">${escapeHtml(copy.otpIgnore)}</p>`;
+<p class="mut" style="margin:32px 0 0;font-size:12px;line-height:1.6;color:#737373;">${escapeHtml(copy.otpIgnore)}</p>`;
 
   return {
     subject: copy.otpSubject,
-    html: layout(lang, copy.otpTitle, copy.otpBody, content, copy.footer),
+    html: layout(
+      lang,
+      `${copy.otpCodeLabel}: ${options.otp}`,
+      copy.otpTitle,
+      copy.otpBody,
+      content,
+      copy.footer,
+    ),
     text: `${copy.otpTitle}\n\n${copy.otpBody}\n\n${copy.otpCodeLabel}: ${options.otp}\n${link.toString()}\n\n${copy.otpExpiry}\n${copy.otpIgnore}`,
   };
 }
