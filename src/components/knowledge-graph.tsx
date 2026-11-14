@@ -63,10 +63,10 @@ function nodeRadius(node: SimNode) {
 }
 
 function nodeFill(node: SimNode) {
-  if (node.type === "root") return "#e8e8e8";
-  if (node.type === "directory") return "#7dcea0";
-  if (node.kind === "visualize") return "#6ea8ff";
-  return "#c8c8c8";
+  if (node.type === "root") return "var(--foreground)";
+  if (node.type === "directory") return "var(--theme-accent)";
+  if (node.kind === "visualize") return "var(--theme-accent)";
+  return "var(--muted-foreground)";
 }
 
 function appendNodeShape(
@@ -83,15 +83,14 @@ function appendNodeShape(
         .attr("height", r * 2)
         .attr("rx", 1.2)
         .attr("transform", "rotate(45)")
-        .attr("fill", nodeFill(d))
-        .attr("stroke", "#b7d4ff")
+        .style("fill", nodeFill(d))
+        .style("stroke", "var(--background)")
         .attr("stroke-width", 1);
       return;
     }
     g.append("circle")
       .attr("r", r)
-      .attr("fill", nodeFill(d))
-      .attr("stroke", "none");
+      .style("fill", nodeFill(d));
   });
 }
 
@@ -110,7 +109,7 @@ function Switch({
       onClick={() => onCheckedChange(!checked)}
       className={cn(
         "relative h-4 w-7 shrink-0 rounded-full transition-colors",
-        checked ? "bg-[#5a8fd4]" : "bg-[#3a3a3a]",
+        checked ? "bg-theme-accent" : "bg-muted",
       )}
     >
       <span
@@ -296,8 +295,8 @@ export function KnowledgeGraph({
 
     const link = viewport
       .append("g")
-      .attr("stroke", "#3a3a3a")
-      .attr("stroke-opacity", 0.85)
+      .style("stroke", "var(--border)")
+      .attr("stroke-opacity", 1)
       .attr("stroke-width", 0.9)
       .selectAll("line")
       .data(simLinks)
@@ -347,16 +346,16 @@ export function KnowledgeGraph({
       .append("text")
       .attr("text-anchor", "middle")
       .attr("dy", (d) => nodeRadius(d) + 12)
-      .attr("fill", (d) =>
+      .style("fill", (d) =>
         d.type === "directory" || d.type === "root"
-          ? "#ddd"
+          ? "var(--foreground)"
           : d.kind === "visualize"
-            ? "#9ec1ff"
-            : "#aaa",
+            ? "var(--theme-accent)"
+            : "var(--muted-foreground)",
       )
       .attr("font-size", 11)
       .attr("paint-order", "stroke")
-      .attr("stroke", "#000")
+      .style("stroke", "var(--background)")
       .attr("stroke-width", 3)
       .attr("stroke-linejoin", "round")
       .attr("opacity", 0)
@@ -408,7 +407,7 @@ export function KnowledgeGraph({
   const hasContent = nodes.some((node) => node.type !== "root");
 
   return (
-    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-black">
+    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
       {sidebarCollapsed ? (
         <button
           onClick={onOpenSidebar}
@@ -419,19 +418,19 @@ export function KnowledgeGraph({
         </button>
       ) : null}
 
-      <div className="flex shrink-0 items-center gap-3 border-b border-[#1e1e1e] px-4 py-3 sm:px-6">
-        <GraphStar size={16} className="text-[#aaa]" />
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3 sm:px-6">
+        <GraphStar size={16} className="text-muted-foreground" />
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-medium text-[#eee]">Knowledge graph</h1>
-          <p className="text-xs text-[#777]">
+          <h1 className="text-sm font-medium text-foreground">Knowledge graph</h1>
+          <p className="text-xs text-muted-foreground">
             Drag nodes · scroll to zoom · click a note to open
-            <span className="text-[#666]">
+            <span className="text-muted-foreground">
               {" "}
-              · <span className="text-[#c8c8c8]">●</span> note ·{" "}
-              <span className="text-[#6ea8ff]">◆</span> visualize
+              · <span className="text-muted-foreground">●</span> note ·{" "}
+              <span className="text-theme-accent">◆</span> visualize
             </span>
             {hoveredTitle ? (
-              <span className="text-[#bbb]"> · {hoveredTitle}</span>
+              <span className="text-foreground"> · {hoveredTitle}</span>
             ) : null}
           </p>
         </div>
@@ -440,7 +439,7 @@ export function KnowledgeGraph({
       <div ref={wrapRef} className="relative min-h-0 flex-1">
         {loading ? (
           <div
-            className="relative grid h-full place-items-center bg-black"
+            className="relative grid h-full place-items-center bg-background"
             aria-busy="true"
             aria-label="Loading graph"
           >
@@ -461,26 +460,26 @@ export function KnowledgeGraph({
             </div>
           </div>
         ) : !hasContent ? (
-          <div className="grid h-full place-items-center px-6 text-center text-sm text-[#777]">
+          <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
             Create a directory and some notes — they show up here as a graph.
           </div>
         ) : (
           <>
             <svg
               ref={svgRef}
-              className="h-full w-full bg-black"
+              className="h-full w-full bg-background"
               role="img"
               aria-label="Directory knowledge graph"
             />
             <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end gap-2 sm:right-4">
               {optionsOpen ? (
-                <div className="w-48 rounded-md border border-[#2a2a2a] bg-[#0c0c0c]/95 p-3 shadow-lg backdrop-blur-sm">
-                  <p className="mb-2.5 text-[11px] font-medium tracking-wide text-[#888] uppercase">
+                <div className="w-48 rounded-md border border-border bg-popover/95 p-3 shadow-lg backdrop-blur-sm">
+                  <p className="mb-2.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                     Options
                   </p>
                   <div className="flex flex-col gap-3">
                     <label className="flex items-center justify-between gap-3">
-                      <span className="text-xs text-[#ccc]">
+                      <span className="text-xs text-foreground">
                         Always show names
                       </span>
                       <Switch
@@ -491,7 +490,7 @@ export function KnowledgeGraph({
                     <button
                       type="button"
                       onClick={centerOnNodes}
-                      className="h-8 rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 text-xs text-[#ddd] transition-colors hover:border-[#3a3a3a] hover:bg-[#1c1c1c] hover:text-white"
+                      className="h-8 rounded-md border border-border bg-secondary px-2.5 text-xs text-foreground transition-colors hover:border-theme-accent hover:text-theme-accent"
                     >
                       Center on nodes
                     </button>
@@ -500,7 +499,7 @@ export function KnowledgeGraph({
               ) : null}
               <button
                 type="button"
-                className="icon-button rounded-md border border-[#2a2a2a] bg-[#0c0c0c]/90 backdrop-blur-sm"
+                className="icon-button rounded-md border border-border bg-popover/90 backdrop-blur-sm"
                 aria-label="Graph settings"
                 aria-expanded={optionsOpen}
                 onClick={() => setOptionsOpen((open) => !open)}
