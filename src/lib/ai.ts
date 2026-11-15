@@ -67,7 +67,7 @@ const verdictSchema = z.object({
 const gapsSchema = z.object({
   eligible: z.boolean(),
   reason: z.string(),
-  gaps: z.array(z.string().min(1)).max(5),
+  gaps: z.array(z.string().min(1)).max(3),
 });
 
 function createClient(credentials: ResolvedProviderCredentials) {
@@ -1074,8 +1074,8 @@ export async function findMissingTopics(
         reason: { type: "string" },
         gaps: {
           type: "array",
-          maxItems: 5,
-          items: { type: "string", maxLength: 180 },
+          maxItems: 3,
+          items: { type: "string", maxLength: 220 },
         },
       },
       required: ["eligible", "reason", "gaps"],
@@ -1088,7 +1088,8 @@ export async function findMissingTopics(
       "Reject placeholders, casual thoughts, journals, to-do lists, random text, isolated questions, copied prompts, code-only content, and notes without a coherent learning topic.",
       "If ineligible, set eligible=false, briefly explain why, and return no gaps.",
       "If eligible, infer the exact subject and learning goal from this note only.",
-      "Identify at most five important conceptual omissions that materially limit understanding.",
+      "Identify at most three conceptual omissions, only the ones that most limit understanding, ordered from most to least important. Fewer is better; return one or two if that is all that truly matters.",
+      "Write each gap as ONE complete, self-contained sentence of at most 140 characters (about 20 words). Never exceed this; shorten the wording instead of listing sub-topics, and never use a colon followed by a list. Write in English only.",
       "Consider missing foundations, mechanisms, assumptions, trade-offs, limitations, edge cases, or a necessary concrete example only when specifically relevant.",
       "Every gap must name the exact missing concept and its relationship to this note.",
       "Never return generic advice such as add more detail, define terms, include examples, improve structure, discuss publishing, or explain the topic.",
