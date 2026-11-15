@@ -1075,7 +1075,7 @@ export async function findMissingTopics(
         gaps: {
           type: "array",
           maxItems: 3,
-          items: { type: "string", maxLength: 220 },
+          items: { type: "string" },
         },
       },
       required: ["eligible", "reason", "gaps"],
