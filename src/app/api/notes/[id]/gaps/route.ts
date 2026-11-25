@@ -6,6 +6,7 @@ import { requireUserId } from "@/lib/auth";
 import { documentToText } from "@/lib/editor-text";
 import { resolveActiveProviderCredentials } from "@/lib/provider-credentials";
 import { idSchema } from "@/lib/schemas";
+import { encodeGapText, gapTitle } from "@/lib/gap-text";
 
 type Context = { params: Promise<{ id: string }> };
 
@@ -56,7 +57,9 @@ export async function POST(_request: Request, context: Context) {
     });
   }
 
-  const known = new Set(existing.map((item) => item.text.trim().toLowerCase()));
+  const known = new Set(
+    existing.map((item) => gapTitle(item.text).trim().toLowerCase()),
+  );
   const analysis = await findMissingTopics(credentials, noteText);
 
   if (!analysis.eligible) {
@@ -68,13 +71,13 @@ export async function POST(_request: Request, context: Context) {
   }
 
   const newItems = analysis.gaps.filter(
-    (gap) => !known.has(gap.trim().toLowerCase()),
+    (gap) => !known.has(gap.title.trim().toLowerCase()),
   );
 
   if (newItems.length > 0) {
     await db
       .insert(checklistItems)
-      .values(newItems.map((text) => ({ noteId: id, text })));
+      .values(newItems.map((gap) => ({ noteId: id, text: encodeGapText(gap) })));
   }
 
   const checklist = await db

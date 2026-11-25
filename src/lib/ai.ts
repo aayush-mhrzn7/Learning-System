@@ -67,7 +67,15 @@ const verdictSchema = z.object({
 const gapsSchema = z.object({
   eligible: z.boolean(),
   reason: z.string(),
-  gaps: z.array(z.string().min(1)).max(3),
+  gaps: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().min(1),
+        done: z.string().min(1),
+      }),
+    )
+    .max(3),
 });
 
 function createClient(credentials: ResolvedProviderCredentials) {
@@ -1075,7 +1083,16 @@ export async function findMissingTopics(
         gaps: {
           type: "array",
           maxItems: 3,
-          items: { type: "string" },
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              description: { type: "string" },
+              done: { type: "string" },
+            },
+            required: ["title", "description", "done"],
+            additionalProperties: false,
+          },
         },
       },
       required: ["eligible", "reason", "gaps"],
@@ -1089,7 +1106,10 @@ export async function findMissingTopics(
       "If ineligible, set eligible=false, briefly explain why, and return no gaps.",
       "If eligible, infer the exact subject and learning goal from this note only.",
       "Identify at most three conceptual omissions, only the ones that most limit understanding, ordered from most to least important. Fewer is better; return one or two if that is all that truly matters.",
-      "Write each gap as ONE complete, self-contained sentence of at most 140 characters (about 20 words). Never exceed this; shorten the wording instead of listing sub-topics, and never use a colon followed by a list. Write in English only.",
+      "Write each gap as an object with three fields. title: ONE complete, self-contained sentence of at most 140 characters (about 20 words) naming the missing concept; never use a colon followed by a list.",
+      "description: 1-2 sentences explaining what this concept is and why the note needs it to be understood correctly.",
+      "done: a concrete Definition of Done starting with a verb, stating what the note must explain for this gap to count as covered (for example: 'The note explains X and shows how it affects Y'). One sentence, do not write the replacement prose itself.",
+      "Write in English only.",
       "Consider missing foundations, mechanisms, assumptions, trade-offs, limitations, edge cases, or a necessary concrete example only when specifically relevant.",
       "Every gap must name the exact missing concept and its relationship to this note.",
       "Never return generic advice such as add more detail, define terms, include examples, improve structure, discuss publishing, or explain the topic.",

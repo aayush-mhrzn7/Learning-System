@@ -1,5 +1,6 @@
 "use client";
 
+import { parseGapText } from "@/lib/gap-text";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import { TableKit } from "@tiptap/extension-table";
@@ -1386,7 +1387,27 @@ export function NoteEditor({
                             : "min-w-0 flex-1"
                         }
                       >
-                        {item.text}
+                        {(() => {
+                          const gap = parseGapText(item.text);
+                          return (
+                            <>
+                              <span className="block">{gap.title}</span>
+                              {gap.description ? (
+                                <span className="mt-1 block text-[13px] leading-5 text-muted-foreground">
+                                  {gap.description}
+                                </span>
+                              ) : null}
+                              {gap.done ? (
+                                <span className="mt-1 block text-[13px] leading-5 text-muted-foreground">
+                                  <span className="font-medium text-foreground/80">
+                                    Done when:{" "}
+                                  </span>
+                                  {gap.done}
+                                </span>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </span>
                       <button
                         type="button"
