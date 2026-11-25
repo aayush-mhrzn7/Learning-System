@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 type ClaimMark = { id: string; top: number; height: number };
+// The highlight never covers more than this share of the minimap, so it stays
+// a small window even when the whole note fits on screen.
+const MAX_VIEWPORT = 0.3;
+
 type Viewport = { top: number; height: number };
 
 function offsetInContent(el: Element, content: HTMLElement) {
@@ -55,7 +59,6 @@ export function EditorMinimap({
   const mirrorRef = useRef<HTMLDivElement | null>(null);
   const [claims, setClaims] = useState<ClaimMark[]>([]);
   const [viewport, setViewport] = useState<Viewport>({ top: 0, height: 1 });
-  const [mapFill, setMapFill] = useState(0.12);
 
   useEffect(() => {
     const scroll = scrollRef.current;
@@ -67,13 +70,15 @@ export function EditorMinimap({
     const paint = () => {
       const written = measureWrittenHeight(content);
       const viewH = Math.max(scroll.clientHeight, 1);
-      const fill = Math.min(1, written / viewH);
-      setMapFill(fill);
 
       const contentW = Math.max(content.clientWidth, 1);
       const asideH = track.parentElement?.clientHeight ?? viewH;
-      const mapH = Math.max(Math.max(40, fill * asideH - 4) - 8, 1);
-      const mapW = Math.max(track.clientWidth - 8, 1);
+      const availH = Math.max(asideH - 16, 1);
+      const availW = Math.max(track.clientWidth - 8, 1);
+      // Uniform scale so text keeps its real proportions.
+      const scale = Math.min(availW / contentW, availH / written);
+      const mapH = Math.max(written * scale, 1);
+      track.style.height = `${mapH + 8}px`;
 
       mirror.replaceChildren();
       const title = content.querySelector("textarea, input");
@@ -102,7 +107,7 @@ export function EditorMinimap({
       mirror.style.paddingLeft = pad.paddingLeft;
       mirror.style.paddingRight = pad.paddingRight;
       mirror.style.paddingBottom = "0";
-      mirror.style.transform = `scale(${mapW / contentW}, ${mapH / written})`;
+      mirror.style.transform = `scale(${scale})`;
 
       const next: ClaimMark[] = [];
       content.querySelectorAll<HTMLElement>("[data-claim-id]").forEach((node) => {
@@ -119,8 +124,8 @@ export function EditorMinimap({
 
       const origin = contentOrigin(scroll, content);
       setViewport({
-        top: Math.max(0, (scroll.scrollTop - origin) / written),
-        height: Math.min(1, viewH / written),
+        top: Math.max(0, Math.min(1 - MAX_VIEWPORT, (scroll.scrollTop - origin) / written)),
+        height: Math.min(MAX_VIEWPORT, viewH / written),
       });
     };
 
@@ -128,8 +133,8 @@ export function EditorMinimap({
       const written = measureWrittenHeight(content);
       const origin = contentOrigin(scroll, content);
       setViewport({
-        top: Math.max(0, (scroll.scrollTop - origin) / written),
-        height: Math.min(1, scroll.clientHeight / written),
+        top: Math.max(0, Math.min(1 - MAX_VIEWPORT, (scroll.scrollTop - origin) / written)),
+        height: Math.min(MAX_VIEWPORT, scroll.clientHeight / written),
       });
     };
 
@@ -161,7 +166,6 @@ export function EditorMinimap({
       <div
         ref={trackRef}
         className="absolute left-1 right-1 top-1 cursor-pointer overflow-hidden rounded-md border border-border bg-card"
-        style={{ height: `max(2.5rem, calc(${mapFill * 100}% - 0.25rem))` }}
         onClick={(event) => {
           const content = contentRef.current;
           if (!content) return;
@@ -173,43 +177,43 @@ export function EditorMinimap({
           scrollTo(ratio * measureWrittenHeight(content));
         }}
       >
-        <div className="pointer-events-none absolute inset-1 overflow-hidden">
+        <div className="absolute inset-1">
           <div
             ref={mirrorRef}
             aria-hidden
-            className="absolute top-0 left-0 origin-top-left select-none"
+            className="pointer-events-none absolute top-0 left-0 origin-top-left select-none"
           />
-        </div>
-        <div
-          className="pointer-events-none absolute inset-x-0 rounded-sm border border-theme-accent/40 bg-theme-accent-soft"
-          style={{
-            top: `${viewport.top * 100}%`,
-            height: `${Math.max(viewport.height * 100, 8)}%`,
-          }}
-        />
-        {claims.map((claim) => (
-          <button
-            key={claim.id}
-            type="button"
-            title="Jump to flagged claim"
-            aria-label="Jump to flagged claim"
-            className="absolute right-0.5 z-10 w-1.5 cursor-pointer rounded-sm bg-red-500 hover:bg-red-400"
+          <div
+            className="pointer-events-none absolute inset-x-0 rounded-sm border border-theme-accent/40 bg-theme-accent-soft"
             style={{
-              top: `${claim.top * 100}%`,
-              height: `${Math.max(claim.height * 100, 2)}%`,
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-              const content = contentRef.current;
-              const node = content?.querySelector<HTMLElement>(
-                `[data-claim-id="${CSS.escape(claim.id)}"]`,
-              );
-              if (!content || !node) return;
-              const { top, height } = offsetInContent(node, content);
-              scrollTo(top + height / 2);
+              top: `${viewport.top * 100}%`,
+              height: `${Math.max(viewport.height * 100, 6)}%`,
             }}
           />
-        ))}
+          {claims.map((claim) => (
+            <button
+              key={claim.id}
+              type="button"
+              title="Jump to flagged claim"
+              aria-label="Jump to flagged claim"
+              className="absolute right-0.5 z-10 w-1.5 cursor-pointer rounded-sm bg-red-500 hover:bg-red-400"
+              style={{
+                top: `${claim.top * 100}%`,
+                height: `${Math.max(claim.height * 100, 2)}%`,
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                const content = contentRef.current;
+                const node = content?.querySelector<HTMLElement>(
+                  `[data-claim-id="${CSS.escape(claim.id)}"]`,
+                );
+                if (!content || !node) return;
+                const { top, height } = offsetInContent(node, content);
+                scrollTo(top + height / 2);
+              }}
+            />
+          ))}
+        </div>
       </div>
     </aside>
   );

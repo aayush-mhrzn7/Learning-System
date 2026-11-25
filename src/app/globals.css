@@ -613,6 +613,12 @@ button:disabled {
   font-size: 0.86em;
 }
 
+.learning-editor > pre,
+.learning-editor > * + pre {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 .learning-editor pre {
   max-width: 100%;
   overflow-wrap: normal;
